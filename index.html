@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+<title>사이트홈드 3D</title>
+</head>
+<body>
+<p id="s" style="font-family:system-ui;color:#d7efe6;background:#07110f;margin:0;padding:16px;min-height:100vh">사이트홈드 3D 로딩 중…</p>
+<script src="game_data_0.js"></script>
+<script src="game_data_1.js"></script>
+<script src="game_data_2.js"></script>
+<script>
+async function main() {
+  const b64 = (window.GAME_CHUNKS || []).join("");
+  const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const ds = new DecompressionStream("gzip");
+  const stream = new Blob([bin]).stream().pipeThrough(ds);
+  const html = await new Response(stream).text();
+  document.open();
+  document.write(html);
+  document.close();
+}
+main().catch(e => { document.getElementById("s").textContent = "로드 실패: " + e; console.error(e); });
+</script>
+</body>
+</html>
