@@ -1,24 +1,3738 @@
 <!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>사이트홈드 3D</title></head>
-<body style="margin:0;background:#07110f;color:#d7efe6;font-family:system-ui;padding:16px">
-<p id="s">사이트홈드 3D 로딩 중…</p>
-<script>
-(async () => {
-  try {
-    const n = 9;
-    const parts = [];
-    for (let i = 0; i < n; i++) {
-      const r = await fetch('part' + i + '.txt');
-      if (!r.ok) throw new Error('part' + i + ' ' + r.status);
-      parts.push(await r.text());
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#07110f" />
+  <meta name="application-name" content="사이트홀드 3D" />
+  <title>사이트홀드 3D</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    .lobby-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .lobby-row input, .lobby-row select {
+      flex: 1; min-width: 100px; height: 40px; border-radius: 12px;
+      border: 1px solid var(--border); background: rgba(7,17,15,0.7);
+      color: var(--fg); padding: 0 12px; font-size: 14px;
     }
-    const html = parts.join('');
-    document.open();
-    document.write(html);
-    document.close();
-  } catch (e) {
-    document.getElementById('s').textContent = '로드 실패: ' + e;
+    .lobby-row button {
+      height: 40px; padding: 0 14px; border-radius: 12px; border: 0;
+      background: var(--primary); color: var(--bg); font-weight: 800; cursor: pointer;
+    }
+    .lobby-row button.ghost {
+      background: transparent; color: var(--fg); border: 1px solid var(--border);
+    }
+    .friend-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+      background: rgba(16,32,28,0.9); font-size: 12px; margin: 2px;
+    }
+    .net-badge {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 25; pointer-events: none;
+      background: rgba(16,32,28,0.9); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 14px; font-size: 12px; color: var(--muted);
+    }
+    .net-badge.on { color: var(--primary); border-color: var(--primary); }
+    :root {
+      --bg: #07110f;
+      --surface: #10201c;
+      --fg: #d7efe6;
+      --muted: #8eaea4;
+      --primary: #3ddeb0;
+      --danger: #ff6b4a;
+      --sand: #e7c98a;
+      --border: #234038;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, sans-serif; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    #c { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+    .top { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top)); }
+    .card {
+      background: rgba(16,32,28,0.82);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px 14px;
+      backdrop-filter: blur(10px);
+    }
+    .label { font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
+    .title { font-size: 18px; font-weight: 800; margin-top: 2px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .sand { color: var(--sand); }
+    .primary { color: var(--primary); }
+    .danger { color: var(--danger); }
+    .bar-wrap { position: absolute; top: 78px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; }
+    .bar { flex: 1; height: 8px; background: #18302a; border-radius: 999px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 100%; background: var(--primary); transform-origin: left center; transform: scaleX(1); }
+    .progress {
+      position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
+      width: min(240px, 70vw); text-align: center;
+    }
+    .progress .track { height: 6px; background: #18302a; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+    .progress .fill { height: 100%; width: 0%; background: var(--sand); }
+    .overlay {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(7,17,15,0.72); backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+    .panel {
+      width: min(420px, 92vw);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .panel h1 { font-size: 34px; font-weight: 800; margin: 8px 0 10px; }
+    .panel p { color: var(--muted); line-height: 1.55; font-size: 14px; }
+    .panel .result { font-size: 24px; font-weight: 800; margin-top: 14px; }
+    .panel button {
+      margin-top: 20px; width: 100%; height: 48px; border: 0; border-radius: 16px;
+      background: var(--primary); color: var(--bg); font-weight: 800; font-size: 16px; cursor: pointer;
+    }
+    .hint { margin-top: 12px; text-align: center; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+    #movePad {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 46%;
+      z-index: 14; pointer-events: auto; touch-action: none;
+    }
+    .stick {
+      position: fixed; left: max(20px, env(safe-area-inset-left)); bottom: max(24px, env(safe-area-inset-bottom));
+      width: 148px; height: 148px; z-index: 30;
+      border-radius: 999px; border: 1px solid var(--border); background: rgba(16,32,28,0.45);
+      pointer-events: none; touch-action: none;
+    }
+    .knob {
+      position: absolute; left: 50%; top: 50%; width: 62px; height: 62px;
+      margin: -31px 0 0 -31px; border-radius: 999px; background: rgba(61,222,176,0.9);
+      pointer-events: none;
+    }
+    .actions {
+      position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom));
+      z-index: 40;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+      pointer-events: auto; touch-action: none;
+    }
+    .actions button {
+      border: 1px solid var(--border); color: var(--fg); font-weight: 800;
+      border-radius: 18px; background: rgba(16,32,28,0.92); cursor: pointer;
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    #btnPlant { min-width: 76px; height: 58px; padding: 0 14px; }
+    #btnPlant.active { background: var(--sand); color: var(--bg); border-color: var(--sand); }
+    #btnJump { min-width: 72px; height: 56px; padding: 0 14px; border-radius: 16px; }
+    #btnSec { min-width: 72px; height: 56px; padding: 0 14px; border-radius: 16px; border-color: var(--primary); color: var(--primary); }
+    #btnFire {
+      width: 92px; height: 92px; border-radius: 999px;
+      background: var(--danger); border-color: var(--danger); color: var(--bg); font-size: 24px;
+    }
+    .wep-cycle {
+      position: fixed;
+      left: max(14px, env(safe-area-inset-left));
+      bottom: max(180px, calc(env(safe-area-inset-bottom) + 164px));
+      z-index: 40; display: flex; gap: 8px; align-items: center; pointer-events: auto;
+    }
+    .wep-cycle button {
+      width: 48px; height: 48px; border-radius: 14px;
+      border: 1px solid var(--border); background: rgba(16,32,28,0.92);
+      color: var(--fg); font-size: 16px; font-weight: 800;
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+    }
+    #btnWepList {
+      min-width: 88px; width: auto; padding: 0 12px; font-size: 12px;
+    }
+    .weapon-bar {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      z-index: 45; display: none; gap: 6px; pointer-events: auto;
+      max-width: min(92vw, 520px); max-height: 50vh; overflow: auto;
+      flex-wrap: wrap; justify-content: center;
+      padding: 12px; border-radius: 18px;
+      background: rgba(7,17,15,0.92); border: 1px solid var(--border);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    }
+    .weapon-bar.open { display: flex; }
+    .weapon-bar-backdrop {
+      position: fixed; inset: 0; z-index: 44; display: none;
+      background: rgba(0,0,0,0.35);
+    }
+    .weapon-bar-backdrop.open { display: block; }
+    @media (max-width: 900px) {
+      .stick { width: 140px; height: 140px; }
+      .knob { width: 58px; height: 58px; margin: -29px 0 0 -29px; }
+      #btnFire { width: 88px; height: 88px; }
+      #weaponInfo { font-size: 11px; }
+      .top .card { padding: 8px 10px; }
+      .panel h1 { font-size: 28px; }
+      .prep-panel { width: min(520px, 96vw); padding: 16px 14px; max-height: 88vh; }
+      .actions { gap: 8px; }
+      .weapon-bar button { min-width: 72px; height: 48px; font-size: 12px; }
+    }
+    @media (max-height: 520px) and (orientation: landscape) {
+      .stick { width: 110px; height: 110px; bottom: 12px; left: 12px; }
+      .actions { bottom: 12px; right: 12px; gap: 6px; }
+      #btnFire { width: 72px; height: 72px; }
+      #btnPlant, #btnSkill, #btnJump, #btnSec { min-width: 60px; height: 48px; font-size: 12px; }
+      .wep-cycle { bottom: 12px; left: 130px; }
+    }
+    .weapon-bar button {
+      min-width: 72px; height: 48px; padding: 0 10px; border-radius: 12px;
+      border: 1px solid var(--border); background: rgba(16,32,28,0.95);
+      color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer;
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+    }
+    .weapon-bar button.active {
+      border-color: var(--primary); color: var(--bg); background: var(--primary);
+    }
+    .weapon-bar button .key {
+      display: block; font-size: 9px; opacity: 0.75; font-family: ui-monospace, monospace;
+    }
+    #weaponInfo {
+      position: fixed; left: max(14px, env(safe-area-inset-left));
+      bottom: max(236px, calc(env(safe-area-inset-bottom) + 220px));
+      z-index: 40; pointer-events: none; text-align: left;
+      font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace;
+      background: rgba(16,32,28,0.8); border: 1px solid var(--border);
+      border-radius: 10px; padding: 4px 10px; max-width: 42vw;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #btnSkill {
+      min-width: 72px; height: 60px; padding: 0 12px;
+      border-radius: 18px; border: 1px solid var(--primary);
+      background: rgba(61,222,176,0.15); color: var(--primary); font-weight: 800;
+    }
+    #btnSkill:disabled { opacity: 0.4; }
+    .prep-panel {
+      width: min(520px, 94vw); max-height: 90vh; overflow: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 24px; padding: 22px 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .prep-panel h2 { font-size: 24px; margin-bottom: 4px; }
+    .prep-panel .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .prep-section { margin-bottom: 14px; }
+    .prep-section h3 { font-size: 13px; letter-spacing: 0.08em; color: var(--primary); margin-bottom: 8px; }
+    .pick-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pick-grid button {
+      flex: 1 1 30%; min-width: 96px; text-align: left;
+      border: 1px solid var(--border); background: rgba(7,17,15,0.55);
+      color: var(--fg); border-radius: 14px; padding: 10px 12px; cursor: pointer;
+      font-size: 13px; font-weight: 700;
+    }
+    .pick-grid button small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .pick-grid button.active { border-color: var(--primary); background: rgba(61,222,176,0.18); }
+    .prep-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .prep-actions button {
+      flex: 1; height: 46px; border: 0; border-radius: 14px; font-weight: 800; cursor: pointer;
+    }
+    .prep-actions .go { background: var(--primary); color: var(--bg); }
+    .prep-timer { font-family: ui-monospace, monospace; color: var(--sand); font-size: 20px; }
+    .hidden { display: none !important; }
+    #lookPad {
+      position: fixed; left: 46%; right: 0; top: 0; bottom: 0;
+      z-index: 14; pointer-events: auto; touch-action: none;
+    }
+    .crosshair {
+      position: fixed; left: 50%; top: 50%; width: 18px; height: 18px;
+      margin: -9px 0 0 -9px; z-index: 12; pointer-events: none;
+    }
+    .crosshair::before, .crosshair::after {
+      content: ""; position: absolute; background: rgba(215,239,230,0.9);
+    }
+    .crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    .crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+    #btnView {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+      z-index: 25; pointer-events: auto;
+      height: 36px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: rgba(16,32,28,0.88);
+      color: var(--fg); font-weight: 700; font-size: 13px; cursor: pointer;
+      backdrop-filter: blur(8px);
+    }
+    #btnSettings {
+      position: fixed; top: 14px; right: 16px; z-index: 25; pointer-events: auto;
+      height: 36px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: rgba(16,32,28,0.88);
+      color: var(--fg); font-weight: 700; font-size: 13px; cursor: pointer;
+      backdrop-filter: blur(8px);
+    }
+    .menu-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    .menu-row button.secondary {
+      margin-top: 0; background: transparent; color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .settings-panel {
+      width: min(440px, 94vw); max-height: 86vh; overflow: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 24px; padding: 22px 20px 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .settings-panel h2 { font-size: 22px; margin-bottom: 6px; }
+    .settings-panel .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+    .setting-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 8px 12px;
+      align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .setting-row label { font-size: 14px; font-weight: 600; }
+    .setting-row .val { font-family: ui-monospace, monospace; font-size: 12px; color: var(--primary); }
+    .setting-row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--primary); }
+    .settings-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .settings-actions button {
+      flex: 1; height: 44px; border-radius: 14px; border: 0; font-weight: 800; cursor: pointer;
+    }
+    .settings-actions .save { background: var(--primary); color: var(--bg); }
+    .settings-actions .reset { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+    .admin-panel {
+      width: min(720px, 96vw); max-height: 92vh; overflow: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 18px 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .admin-panel h2 { font-size: 22px; margin-bottom: 6px; }
+    .admin-panel .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; line-height: 1.45; }
+    .admin-panel textarea {
+      width: 100%; min-height: 220px; resize: vertical;
+      border-radius: 12px; border: 1px solid var(--border);
+      background: #07110f; color: #d7efe6; padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45;
+    }
+    .admin-panel pre {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: rgba(7,17,15,0.85); border: 1px solid var(--border);
+      color: var(--muted); font-size: 11px; white-space: pre-wrap; max-height: 120px; overflow: auto;
+    }
+    .admin-panel pre.err { color: var(--danger); }
+    .admin-panel pre.ok { color: var(--primary); }
+    .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .admin-actions button {
+      height: 42px; padding: 0 14px; border-radius: 12px; border: 0;
+      font-weight: 800; cursor: pointer; background: var(--primary); color: var(--bg);
+    }
+    .admin-actions button.ghost {
+      background: transparent; color: var(--fg); border: 1px solid var(--border);
+    }
+    .admin-actions button.danger {
+      background: transparent; color: var(--danger); border: 1px solid var(--danger);
+    }
+    #adminGate input {
+      width: 100%; height: 44px; border-radius: 12px; border: 1px solid var(--border);
+      background: rgba(7,17,15,0.7); color: var(--fg); padding: 0 12px; font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <div class="top">
+      <div class="card">
+        <div class="label">SITEHOLD 3D</div>
+        <div class="title">라운드 <span id="round">1</span></div>
+        <div class="mono primary" style="font-size:12px;margin-top:4px"><span id="wins">0</span> 승 · <span id="losses">0</span> 패</div>
+      </div>
+      <div class="card" style="text-align:right">
+        <div class="mono sand" style="font-size:26px;line-height:1" id="timer">70</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="timerLabel">남은 시간</div>
+      </div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar"><i id="hpBar"></i></div>
+      <span class="mono" style="font-size:12px;color:var(--muted)">HP <span id="hp">100</span></span>
+      <span class="mono danger" style="font-size:12px">적 <span id="enemies">3</span></span>
+    </div>
+    <div class="progress hidden"	 id="progressBox">
+      <div style="font-size:12px;color:var(--sand)" id="progressLabel">설치 중</div>
+      <div class="track"><div class="fill" id="progressFill"></div></div>
+    </div>
+  </div>
+  <div class="crosshair hidden" id="crosshair"></div>
+  <button type="button" id="btnView" class="hidden">1인칭 · V</button>
+  <button type="button" id="btnSettings">설정</button>
+
+  <div id="movePad" class="hidden"></div>
+  <div id="lookPad" class="hidden"></div>
+  <div class="stick hidden" id="stick"><div class="knob" id="knob"></div></div>
+  <div class="wep-cycle hidden" id="wepCycle">
+    <button type="button" id="btnWepPrev" aria-label="이전 무기">◀</button>
+    <button type="button" id="btnWepList" aria-label="무기 목록">무기</button>
+    <button type="button" id="btnWepNext" aria-label="다음 무기">▶</button>
+  </div>
+  <div class="actions hidden" id="actions">
+    <button id="btnSkill" type="button">스킬</button>
+    <button id="btnSec" type="button">특수</button>
+    <button id="btnJump" type="button">점프</button>
+    <button id="btnPlant" type="button">설치</button>
+    <button id="btnFire" type="button">●</button>
+  </div>
+  <div id="weaponInfo" class="hidden">라이플</div>
+  <div class="weapon-bar-backdrop" id="weaponBarBackdrop"></div>
+  <div class="weapon-bar" id="weaponBar"></div>
+
+  <div class="overlay hidden" id="prepOverlay">
+    <div class="prep-panel">
+      <h2>준비 단계</h2>
+      <div class="sub">무기와 스킬을 고르세요. <span class="prep-timer" id="prepTimer">15</span>초 후 자동 시작</div>
+      <div class="prep-section">
+        <h3>인원 직접 입력 (아군 AI / 적 AI · 0~10)</h3>
+        <div id="prepCounts"></div>
+      </div>
+      <div class="prep-section">
+        <h3>맵 · 무기</h3>
+        <div class="pick-grid" id="prepWeapons"></div>
+      </div>
+      <div class="prep-section">
+        <h3>요원 (Q / E / C · X 궁)</h3>
+        <div class="pick-grid" id="prepSkills"></div>
+      </div>
+      <div class="prep-actions">
+        <button type="button" class="go" id="btnBeginFight">전투 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="panel">
+      <div class="label primary">TABLET TACTICAL · 3D</div>
+      <h1>사이트홀드 3D</h1>
+      <p>모바일: 왼쪽 조이스틱 이동 · 오른쪽 화면 시점 · 점프/특수/사격 버튼. PC: WASD · 스페이스 점프 · 클릭 사격 · 우클릭 특수.</p>
+      <div class="result" id="banner"></div>
+      <div class="hint">최고 매치 승수 <span id="best">0</span> · 누적 처치 <span id="kills">0</span></div>
+      <div style="display:grid;gap:8px;margin:12px 0;text-align:left">
+        <label style="font-size:12px;color:var(--muted)">플레이어 이름
+          <input id="playerName" type="text" maxlength="16" placeholder="이름 입력" value=""
+            style="width:100%;margin-top:4px;height:40px;border-radius:12px;border:1px solid var(--border);background:rgba(7,17,15,0.7);color:var(--fg);padding:0 12px;font-size:14px" />
+        </label>
+        <label style="font-size:12px;color:var(--muted)">비밀번호 (선택 · 시크릿 해금)
+          <input id="playerPass" type="password" maxlength="24" placeholder="비밀번호"
+            style="width:100%;margin-top:4px;height:40px;border-radius:12px;border:1px solid var(--border);background:rgba(7,17,15,0.7);color:var(--fg);padding:0 12px;font-size:14px" />
+        </label>
+        <div style="font-size:11px;color:var(--muted)" id="nameBuffHint">특수 이름/비밀번호 시 버프가 적용됩니다.</div>
+      </div>
+      <button id="btnStart" type="button">AI 대전</button>
+      <div class="menu-row">
+        <button id="btnOpenLobby" type="button" class="secondary">온라인 PvP</button>
+        <button id="btnOpenSettings" type="button" class="secondary">설정</button>
+        <button id="btnOpenAdmin" type="button" class="secondary">관리자</button>
+      </div>
+      <div class="hint">AI 대전: 봇과 플레이 · 온라인 PvP: 방 코드로 사람과 대전</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="adminOverlay">
+    <div class="admin-panel">
+      <h2>관리자 콘솔</h2>
+      <div class="sub">권한이 있는 경우에만 편집할 수 있습니다. 커스텀 맵은 이 기기에 저장됩니다.</div>
+      <div id="adminGate">
+        <label style="font-size:12px;color:var(--muted)">인증
+          <input id="adminPass" type="password" placeholder="" autocomplete="off" />
+        </label>
+        <div class="admin-actions">
+          <button type="button" id="btnAdminLogin">접속</button>
+          <button type="button" id="btnAdminClose1" class="ghost">닫기</button>
+        </div>
+        <pre id="adminGateLog"></pre>
+      </div>
+      <div id="adminEditor" class="hidden">
+        <div class="sub" id="adminMapList">맵 목록 로딩…</div>
+        <textarea id="adminCode" spellcheck="false"></textarea>
+        <div class="admin-actions">
+          <button type="button" id="btnAdminRun">코드 실행</button>
+          <button type="button" id="btnAdminTemplate" class="ghost">예제 불러오기</button>
+          <button type="button" id="btnAdminClearCustom" class="danger">커스텀 맵 전부 삭제</button>
+          <button type="button" id="btnAdminClose2" class="ghost">닫기</button>
+        </div>
+        <pre id="adminLog"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="lobbyOverlay">
+    <div class="prep-panel" style="width:min(520px,94vw)">
+      <h2>온라인 PvP 로비</h2>
+      <div class="sub">사람과 대전(PvP) 또는 같이 AI 레이드. 호스트가 규칙을 정하면 참가자는 따릅니다.</div>
+      <div class="prep-section">
+        <h3>매치 종류</h3>
+        <div class="lobby-row">
+          <select id="matchTypeSelect">
+            <option value="pvp">PvP — 사람 vs 사람</option>
+            <option value="coop">협동 레이드 — 같이 AI 상대</option>
+          </select>
+        </div>
+      </div>
+      <div class="prep-section">
+        <h3>내 이름 · 친구</h3>
+        <div class="lobby-row">
+          <input id="lobbyName" maxlength="16" placeholder="로비 표시 이름" />
+        </div>
+        <div id="friendList" style="margin-top:8px;min-height:28px"></div>
+      </div>
+      <div class="prep-section">
+        <h3>방 만들기 (호스트)</h3>
+        <div class="lobby-row">
+          <input id="hostRoomCode" maxlength="24" placeholder="방 코드 (예: pvp01)" />
+        </div>
+        <div class="lobby-row">
+          <select id="hostModeSelect"></select>
+          <button type="button" id="btnHostCreate">방 만들기</button>
+        </div>
+        <div class="hint" id="hostRoomInfo" style="text-align:left;margin-top:6px">영문·숫자 3~24자. 친구에게 같은 코드를 알려주세요.</div>
+      </div>
+      <div class="prep-section">
+        <h3>방 참가</h3>
+        <div class="lobby-row">
+          <input id="joinRoomCode" maxlength="24" placeholder="호스트 방 코드" />
+          <button type="button" id="btnJoinRoom">참가</button>
+        </div>
+      </div>
+      <div class="prep-section">
+        <h3>접속자</h3>
+        <div id="lobbyPlayers" class="hint" style="text-align:left">-</div>
+      </div>
+      <div class="prep-actions">
+        <button type="button" class="go" id="btnLobbyStart" disabled>매치 시작 (호스트)</button>
+        <button type="button" id="btnLobbyClose" style="flex:1;height:46px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--fg);font-weight:700;cursor:pointer">닫기</button>
+      </div>
+      <div class="hint" id="lobbyStatus">같은 Wi-Fi/네트워크 또는 인터넷으로 P2P 연결합니다.</div>
+    </div>
+  </div>
+  <div class="net-badge hidden" id="netBadge">오프라인</div>
+
+  <div class="overlay hidden" id="settingsOverlay">
+    <div class="settings-panel">
+      <h2>설정</h2>
+      <div class="sub">이동 범위·감도·속도를 직접 조절합니다. 값은 이 기기에 저장됩니다.</div>
+      <div class="setting-row">
+        <label for="setMap">맵 이동 범위</label><span class="val" id="valMap">1.8x</span>
+        <input id="setMap" type="range" min="1" max="2.5" step="0.1" />
+      </div>
+      <div class="setting-row">
+        <label for="setMove">이동 속도</label><span class="val" id="valMove">10</span>
+        <input id="setMove" type="range" min="4" max="18" step="0.5" />
+      </div>
+      <div class="setting-row">
+        <label for="setMouse">마우스 감도</label><span class="val" id="valMouse">1.4</span>
+        <input id="setMouse" type="range" min="0.3" max="3.5" step="0.1" />
+      </div>
+      <div class="setting-row">
+        <label for="setTouch">터치 시야 감도</label><span class="val" id="valTouch">1.2</span>
+        <input id="setTouch" type="range" min="0.3" max="3" step="0.1" />
+      </div>
+      <div class="setting-row">
+        <label for="setPitch">상하 시야 범위</label><span class="val" id="valPitch">1.2</span>
+        <input id="setPitch" type="range" min="0.4" max="1.5" step="0.05" />
+      </div>
+      <div class="setting-row">
+        <label for="setFov">시야각 (FOV)</label><span class="val" id="valFov">70</span>
+        <input id="setFov" type="range" min="50" max="100" step="1" />
+      </div>
+      <div class="setting-row">
+        <label for="setStick">스틱 감도</label><span class="val" id="valStick">1.0</span>
+        <input id="setStick" type="range" min="0.5" max="2" step="0.1" />
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="reset" id="btnResetSettings">기본값</button>
+        <button type="button" class="save" id="btnCloseSettings">적용 · 닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
   }
-})();
-</script>
-</body></html>
+  </script>
+  <script type="module">
+import * as THREE from 'three';
+
+const BEST_KEY = 'sitehold-3d-best-v1';
+// Base map (scaled by settings.mapScale at runtime for movement bounds & feel)
+const BASE_WORLD = { w: 90, d: 60 };
+const WORLD = { w: BASE_WORLD.w, d: BASE_WORLD.d };
+const MAPS = [
+  {
+    id: 'ascent', name: '직선 사이트',
+    sites: [ { x: 26, z: 0, r: 5.6 }, { x: 22, z: -10, r: 5.2 }, { x: 24, z: 11, r: 5.0 } ],
+    spawn: { x: -30, z: 0 },
+    enemies: [ { x: 18, z: -12 }, { x: 28, z: 12 }, { x: 14, z: 10 }, { x: 30, z: -6 }, { x: 12, z: -8 } ],
+    allies: [ { x: -26, z: -5 }, { x: -26, z: 5 }, { x: -22, z: 0 }, { x: -28, z: -8 } ],
+    covers: [
+      { x: -16, z: -10, w: 5, d: 1.4, h: 1.6 }, { x: -10, z: 4, w: 1.4, d: 7, h: 1.8 },
+      { x: -2, z: -8, w: 5, d: 1.4, h: 1.5 }, { x: 6, z: 8, w: 1.4, d: 6, h: 1.7 },
+      { x: 14, z: -12, w: 7, d: 1.4, h: 1.5 }, { x: 18, z: 10, w: 7, d: 1.4, h: 1.5 },
+      { x: 20, z: -2, w: 1.4, d: 5, h: 1.8 }, { x: -22, z: 8, w: 4, d: 1.3, h: 1.5 },
+      { x: 4, z: -2, w: 1.3, d: 4, h: 1.6 }, { x: 10, z: 2, w: 3, d: 1.2, h: 1.4 },
+    ],
+  },
+  {
+    id: 'split', name: '갈림 미드',
+    sites: [ { x: 22, z: 10, r: 5.4 }, { x: 18, z: -8, r: 5.0 }, { x: 28, z: 2, r: 4.8 } ],
+    spawn: { x: -28, z: -8 },
+    enemies: [ { x: 20, z: 14 }, { x: 26, z: 6 }, { x: 12, z: 12 }, { x: 24, z: -10 }, { x: 16, z: 0 } ],
+    allies: [ { x: -24, z: -10 }, { x: -22, z: -4 }, { x: -26, z: 2 }, { x: -20, z: -12 } ],
+    covers: [
+      { x: -14, z: -6, w: 1.3, d: 8, h: 1.7 }, { x: -6, z: 2, w: 6, d: 1.3, h: 1.5 },
+      { x: 2, z: -10, w: 1.3, d: 6, h: 1.6 }, { x: 8, z: 6, w: 5, d: 1.3, h: 1.5 },
+      { x: 14, z: -4, w: 1.3, d: 7, h: 1.8 }, { x: 18, z: 12, w: 6, d: 1.3, h: 1.5 },
+      { x: 10, z: 14, w: 1.3, d: 4, h: 1.6 }, { x: -18, z: 4, w: 4, d: 1.3, h: 1.5 },
+      { x: 4, z: 0, w: 1.2, d: 3, h: 1.5 },
+    ],
+  },
+  {
+    id: 'bind', name: '이중 박스',
+    sites: [ { x: 24, z: -8, r: 5.5 }, { x: 20, z: 8, r: 5.2 }, { x: 28, z: 0, r: 4.6 } ],
+    spawn: { x: -28, z: 6 },
+    enemies: [ { x: 22, z: -12 }, { x: 28, z: -4 }, { x: 16, z: -10 }, { x: 26, z: 10 }, { x: 14, z: 6 } ],
+    allies: [ { x: -24, z: 8 }, { x: -22, z: 2 }, { x: -26, z: -2 }, { x: -20, z: 10 } ],
+    covers: [
+      { x: -12, z: 8, w: 5, d: 1.4, h: 1.6 }, { x: -8, z: -2, w: 1.4, d: 6, h: 1.7 },
+      { x: 0, z: 6, w: 4, d: 1.3, h: 1.5 }, { x: 4, z: -8, w: 1.4, d: 5, h: 1.6 },
+      { x: 12, z: 0, w: 6, d: 1.3, h: 1.5 }, { x: 16, z: -12, w: 1.4, d: 5, h: 1.8 },
+      { x: 22, z: -2, w: 4, d: 1.3, h: 1.5 }, { x: -20, z: -6, w: 1.3, d: 4, h: 1.5 },
+      { x: 8, z: 10, w: 3, d: 1.3, h: 1.4 },
+    ],
+  },
+  {
+    id: 'haven', name: '삼면 요새',
+    sites: [ { x: 20, z: 14, r: 5.0 }, { x: 26, z: -2, r: 5.4 }, { x: 16, z: -12, r: 5.1 }, { x: 30, z: 8, r: 4.5 } ],
+    spawn: { x: -30, z: -4 },
+    enemies: [ { x: 22, z: 16 }, { x: 28, z: 0 }, { x: 18, z: -14 }, { x: 32, z: 10 }, { x: 12, z: 8 }, { x: 24, z: -8 } ],
+    allies: [ { x: -26, z: -6 }, { x: -24, z: 2 }, { x: -28, z: 6 }, { x: -22, z: -10 } ],
+    covers: [
+      { x: -18, z: 0, w: 1.4, d: 9, h: 1.7 }, { x: -8, z: 10, w: 6, d: 1.3, h: 1.5 },
+      { x: -4, z: -8, w: 5, d: 1.3, h: 1.5 }, { x: 6, z: 4, w: 1.3, d: 7, h: 1.8 },
+      { x: 12, z: -14, w: 6, d: 1.3, h: 1.5 }, { x: 18, z: 12, w: 1.3, d: 5, h: 1.6 },
+      { x: 24, z: -6, w: 4, d: 1.3, h: 1.5 }, { x: 14, z: 0, w: 1.2, d: 4, h: 1.5 },
+      { x: -12, z: -12, w: 3, d: 1.2, h: 1.4 }, { x: 8, z: 14, w: 3, d: 1.2, h: 1.4 },
+    ],
+  },
+  {
+    id: 'breeze', name: '광활 평원',
+    sites: [ { x: 28, z: 0, r: 6.2 }, { x: 20, z: -14, r: 5.4 } ],
+    spawn: { x: -32, z: 0 },
+    enemies: [ { x: 26, z: 4 }, { x: 30, z: -4 }, { x: 18, z: -16 }, { x: 22, z: 12 }, { x: 14, z: 0 } ],
+    allies: [ { x: -28, z: -4 }, { x: -28, z: 4 }, { x: -24, z: 0 }, { x: -30, z: 8 } ],
+    covers: [
+      { x: -20, z: -6, w: 3, d: 1.2, h: 1.3 }, { x: -12, z: 8, w: 1.2, d: 4, h: 1.4 },
+      { x: -2, z: -12, w: 4, d: 1.2, h: 1.3 }, { x: 6, z: 6, w: 1.2, d: 5, h: 1.5 },
+      { x: 14, z: -4, w: 5, d: 1.2, h: 1.4 }, { x: 22, z: 10, w: 1.3, d: 4, h: 1.5 },
+      { x: 26, z: -10, w: 4, d: 1.3, h: 1.5 }, { x: 10, z: 0, w: 1.2, d: 3, h: 1.3 },
+    ],
+  },
+  {
+    id: 'icebox', name: '동결 통로',
+    sites: [ { x: 24, z: 8, r: 5.0 }, { x: 24, z: -8, r: 5.0 }, { x: 30, z: 0, r: 4.8 } ],
+    spawn: { x: -28, z: 0 },
+    enemies: [ { x: 22, z: 12 }, { x: 22, z: -12 }, { x: 30, z: 4 }, { x: 30, z: -4 }, { x: 16, z: 0 } ],
+    allies: [ { x: -24, z: 4 }, { x: -24, z: -4 }, { x: -26, z: 0 }, { x: -22, z: 8 } ],
+    covers: [
+      { x: -16, z: 0, w: 1.5, d: 10, h: 1.9 }, { x: -8, z: 8, w: 5, d: 1.4, h: 1.6 },
+      { x: -8, z: -8, w: 5, d: 1.4, h: 1.6 }, { x: 2, z: 0, w: 1.4, d: 8, h: 1.8 },
+      { x: 10, z: 10, w: 4, d: 1.3, h: 1.5 }, { x: 10, z: -10, w: 4, d: 1.3, h: 1.5 },
+      { x: 18, z: 2, w: 1.3, d: 6, h: 1.7 }, { x: 26, z: 0, w: 3, d: 1.3, h: 1.5 },
+      { x: 14, z: 0, w: 1.2, d: 3, h: 1.4 },
+    ],
+  },
+];
+let mapIndex = 0;
+let SITE = { ...MAPS[0].sites[0] };
+let SPAWN = { ...MAPS[0].spawn };
+// secondary: 우클릭 전용
+const WEAPONS = [
+  {
+    id: 'rifle', name: '라이플', key: '1',
+    dmg: 28, cool: 0.13, pellets: 1, speed: 42,
+    spreadStill: 0.018, spreadMove: 0.11, shake: 0.14,
+    color: 0x1a2e28, accent: 0x3ddeb0, length: 0.55, note: '균형 · 중거리',
+    shape: 'rifle',
+    sec: { type: 'burst', name: '3점사', dmg: 24, cool: 0.38, pellets: 3, gap: 0.04, spread: 0.03, speed: 44, shake: 0.2, color: 0x3ddeb0 },
+  },
+  {
+    id: 'smg', name: 'SMG', key: '2',
+    dmg: 14, cool: 0.065, pellets: 1, speed: 36,
+    spreadStill: 0.04, spreadMove: 0.17, shake: 0.08,
+    color: 0x2a4038, accent: 0x7ec8ff, length: 0.4, note: '연사 · 근거리',
+    shape: 'smg',
+    sec: { type: 'spray', name: '소이 탄', dmg: 10, cool: 0.55, pellets: 6, spread: 0.2, speed: 28, shake: 0.18, color: 0xff8a40 },
+  },
+  {
+    id: 'shotgun', name: '샷건', key: '3',
+    dmg: 11, cool: 0.72, pellets: 8, speed: 26,
+    spreadStill: 0.16, spreadMove: 0.24, shake: 0.32,
+    color: 0x3a2820, accent: 0xe7c98a, length: 0.48, note: '산탄 · 근접 특화',
+    shape: 'shotgun',
+    sec: { type: 'slug', name: '슬러그', dmg: 48, cool: 0.9, pellets: 1, spread: 0.02, speed: 40, shake: 0.4, color: 0xe7c98a },
+  },
+  {
+    id: 'sniper', name: '스나이퍼', key: '4',
+    dmg: 95, cool: 1.05, pellets: 1, speed: 60,
+    spreadStill: 0.002, spreadMove: 0.2, shake: 0.4,
+    color: 0x152018, accent: 0xff6b4a, length: 0.75, note: '정지 시 고정밀',
+    shape: 'sniper',
+    sec: { type: 'zoom', name: '정조준', dmg: 110, cool: 1.2, pellets: 1, spread: 0.0, speed: 70, shake: 0.45, color: 0xff6b4a, zoom: true },
+  },
+  {
+    id: 'pistol', name: '권총', key: '5',
+    dmg: 22, cool: 0.2, pellets: 1, speed: 40,
+    spreadStill: 0.03, spreadMove: 0.1, shake: 0.1,
+    color: 0x243830, accent: 0xd7efe6, length: 0.28, note: '기동 · 보조',
+    shape: 'pistol',
+    sec: { type: 'flare', name: '섬광탄', dmg: 5, cool: 4.5, pellets: 1, spread: 0.01, speed: 22, shake: 0.12, color: 0xffffff, flash: true },
+  },
+  {
+    id: 'knife', name: '칼', key: '6',
+    dmg: 55, cool: 0.42, pellets: 0, speed: 0,
+    spreadStill: 0, spreadMove: 0, shake: 0.22,
+    color: 0xc8d4cc, accent: 0xffffff, length: 0.22, note: '근접 베기',
+    shape: 'knife', melee: true, range: 2.35,
+    sec: { type: 'stab', name: '찌르기', dmg: 85, cool: 0.85, range: 2.6, shake: 0.3, color: 0xffe08a },
+  },
+  {
+    id: 'lmg', name: 'LMG', key: '7',
+    dmg: 18, cool: 0.09, pellets: 1, speed: 38,
+    spreadStill: 0.05, spreadMove: 0.18, shake: 0.16,
+    color: 0x2a2218, accent: 0xc4a574, length: 0.62, note: '화력 억제',
+    shape: 'lmg',
+    sec: { type: 'suppress', name: '제압 사격', dmg: 12, cool: 0.7, pellets: 10, spread: 0.14, speed: 34, shake: 0.28, color: 0xc4a574 },
+  },
+  {
+    id: 'arc', name: '아크 건', key: '8',
+    dmg: 20, cool: 0.22, pellets: 1, speed: 32,
+    spreadStill: 0.025, spreadMove: 0.12, shake: 0.12,
+    color: 0x1a2840, accent: 0x66ccff, length: 0.5, note: '전기 탄',
+    shape: 'arc',
+    sec: { type: 'arc', name: '체인 라이트', dmg: 30, cool: 1.1, pellets: 1, spread: 0.02, speed: 36, shake: 0.25, color: 0x66ccff, chain: true },
+  },
+  {
+    id: 'burst', name: '버스트', key: '9',
+    dmg: 32, cool: 0.28, pellets: 3, speed: 46,
+    spreadStill: 0.02, spreadMove: 0.12, shake: 0.16,
+    color: 0x203028, accent: 0x9dffb0, length: 0.52, note: '점사 · 중거리',
+    shape: 'rifle',
+    sec: { type: 'burst', name: '풀오토 전환', dmg: 16, cool: 0.5, pellets: 5, gap: 0.03, spread: 0.05, speed: 42, shake: 0.22, color: 0x9dffb0 },
+  },
+  {
+    id: 'revolver', name: '리볼버', key: '0',
+    dmg: 62, cool: 0.55, pellets: 1, speed: 50,
+    spreadStill: 0.015, spreadMove: 0.14, shake: 0.28,
+    color: 0x3a3020, accent: 0xffb060, length: 0.32, note: '고화력 · 느린 장전',
+    shape: 'pistol',
+    sec: { type: 'slug', name: '관통탄', dmg: 78, cool: 1.0, pellets: 1, spread: 0.01, speed: 58, shake: 0.35, color: 0xffb060 },
+  },
+  {
+    id: 'carbine', name: '카빈', key: '',
+    dmg: 24, cool: 0.1, pellets: 1, speed: 44,
+    spreadStill: 0.022, spreadMove: 0.1, shake: 0.12,
+    color: 0x1e2820, accent: 0x80e0c0, length: 0.5, note: '경량 돌격',
+    shape: 'rifle',
+    sec: { type: 'spray', name: '산탄 전환', dmg: 9, cool: 0.65, pellets: 5, spread: 0.16, speed: 30, shake: 0.2, color: 0x80e0c0 },
+  },
+  {
+    id: 'rail', name: '레일건', key: '',
+    dmg: 88, cool: 1.2, pellets: 1, speed: 80,
+    spreadStill: 0.001, spreadMove: 0.18, shake: 0.5,
+    color: 0x101828, accent: 0xa0d0ff, length: 0.8, note: '충전 빔',
+    shape: 'sniper',
+    sec: { type: 'zoom', name: '과충전', dmg: 130, cool: 1.6, pellets: 1, spread: 0.0, speed: 90, shake: 0.55, color: 0xa0d0ff, zoom: true },
+  },
+  {
+    id: 'minigun', name: '미니건', key: '',
+    dmg: 9, cool: 0.035, pellets: 1, speed: 40,
+    spreadStill: 0.06, spreadMove: 0.2, shake: 0.1,
+    color: 0x2c2418, accent: 0xff9040, length: 0.72, note: '초고연사 · 탄퍼짐 큼',
+    shape: 'minigun',
+    sec: {
+      type: 'suppress', name: '과열 난사',
+      dmg: 7, cool: 0.9, pellets: 14, spread: 0.22, speed: 36, shake: 0.35, color: 0xff7040,
+    },
+  },
+];
+const SECRET_WEAPON = {
+  id: 'legend', name: '만리장검', key: '',
+  dmg: 40, cool: 0.15, pellets: 1, speed: 48,
+  spreadStill: 0.01, spreadMove: 0.08, shake: 0.12,
+  color: 0x3a2010, accent: 0xffd27a, length: 0.7, note: '전설 · 이름 버프',
+  shape: 'legend', secret: true,
+  sec: { type: 'wave', name: '파동참', dmg: 55, cool: 1.4, pellets: 1, spread: 0.0, speed: 50, shake: 0.35, color: 0xffd27a, wave: true },
+};
+// 발로란트식 키: Q / E / C 스킬, X 궁극기
+const AGENTS = [
+  {
+    id: 'rush', name: '러시',
+    q: { id: 'flash', name: '섬광', cool: 10, charges: 2 },
+    e: { id: 'dash', name: '돌진', cool: 7, charges: 2 },
+    c: { id: 'smoke', name: '연막', cool: 14, charges: 1 },
+    x: { id: 'overdrive', name: '광분', cost: 6, dur: 8, desc: '8초 공격력 +40%' },
+  },
+  {
+    id: 'guard', name: '수호',
+    q: { id: 'smoke', name: '연막', cool: 12, charges: 2 },
+    e: { id: 'heal', name: '회복', cool: 14, charges: 1 },
+    c: { id: 'flash', name: '섬광', cool: 11, charges: 1 },
+    x: { id: 'fortify', name: '방벽', cost: 7, dur: 10, desc: '보호막 50' },
+  },
+  {
+    id: 'stalk', name: '추적',
+    q: { id: 'dash', name: '돌진', cool: 6, charges: 2 },
+    e: { id: 'flash', name: '섬광', cool: 9, charges: 2 },
+    c: { id: 'heal', name: '회복', cool: 16, charges: 1 },
+    x: { id: 'hunt', name: '추적', cost: 6, dur: 7, desc: '이속 증가 + 약화 사격' },
+  },
+  {
+    id: 'smoke', name: '연막수',
+    q: { id: 'smoke', name: '연막', cool: 9, charges: 3 },
+    e: { id: 'smoke', name: '연막+', cool: 12, charges: 1 },
+    c: { id: 'flash', name: '섬광', cool: 12, charges: 1 },
+    x: { id: 'fortify', name: '연막장', cost: 7, dur: 9, desc: '보호막 + 이속' },
+  },
+  {
+    id: 'medic', name: '의무',
+    q: { id: 'heal', name: '회복', cool: 10, charges: 2 },
+    e: { id: 'heal', name: '집중 치료', cool: 16, charges: 1 },
+    c: { id: 'smoke', name: '연막', cool: 14, charges: 1 },
+    x: { id: 'fortify', name: '야전병원', cost: 8, dur: 10, desc: '보호막 60' },
+  },
+  {
+    id: 'duelist', name: '결투',
+    q: { id: 'flash', name: '섬광', cool: 8, charges: 2 },
+    e: { id: 'dash', name: '돌진', cool: 5, charges: 2 },
+    c: { id: 'dash', name: '재돌진', cool: 9, charges: 1 },
+    x: { id: 'overdrive', name: '결투광', cost: 5, dur: 6, desc: '공격력 +55%' },
+  },
+];
+const HEAD_MULT = 2.0;
+const BODY_MULT = 1.0;
+const LEG_MULT = 0.75;
+
+// 호스트가 고르는 게임 모드 (참가자는 강제 적용)
+const GAME_MODES = [
+  { id: 'classic', name: '클래식', desc: '기본 규칙' },
+  { id: 'rush', name: '러시', desc: '이속↑ 라운드 45초' },
+  { id: 'chaos', name: '카오스', desc: '5초마다 랜덤 이벤트' },
+  { id: 'lowgrav', name: '저중력', desc: '점프↑ · 체공' },
+  { id: 'bighead', name: '빅헤드', desc: '헤드샷 판정 확대 · 헤드×3' },
+  { id: 'fog', name: '안개', desc: '시야 짧은 안개' },
+  { id: 'tiny', name: '미니맵', desc: '모두 작아짐 · 이속↑' },
+  { id: 'mirror', name: '미러', desc: '조작 좌우 반전' },
+  { id: 'vampire', name: '흡혈', desc: '피해의 일부 회복' },
+  { id: 'storm', name: '폭풍', desc: '주기적 번개 지역 피해' },
+  { id: 'hotpotato', name: '핫포테이토', desc: '시간이 점점 줄어듦' },
+  { id: 'giant', name: '거인', desc: '플레이어 커짐 · 피통↑' },
+  { id: 'glass', name: '유리대포', desc: '쌍방 피해×2' },
+  { id: 'silent', name: '무음', desc: '연막 자주 · 시야 애매' },
+  { id: 'bounce', name: '바운스', desc: '점프 연속 · 통통' },
+  { id: 'roulette', name: '룰렛', desc: '라운드마다 모드 섞임' },
+];
+
+const FRIENDS_KEY = 'sitehold-friends-v1';
+function loadFriends() {
+  try { return JSON.parse(localStorage.getItem(FRIENDS_KEY) || '[]'); } catch { return []; }
+}
+function saveFriends(list) {
+  try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(list.slice(0, 30))); } catch {}
+}
+function addFriend(name, code) {
+  if (!name) return;
+  const list = loadFriends().filter((f) => f.code !== code && f.name !== name);
+  list.unshift({ name, code: code || '', t: Date.now() });
+  saveFriends(list);
+}
+const SETTINGS_KEY = 'sitehold-3d-settings-v1';
+const DEFAULT_SETTINGS = {
+  mapScale: 1.8,
+  moveSpeed: 10,
+  mouseSens: 1.4,
+  touchSens: 1.2,
+  pitchMax: 1.2,
+  fov: 70,
+  stickSens: 1.0,
+};
+function loadSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    return { ...DEFAULT_SETTINGS, ...raw };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+const settings = loadSettings();
+WORLD.w = BASE_WORLD.w * settings.mapScale;
+WORLD.d = BASE_WORLD.d * settings.mapScale;
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07110f);
+scene.fog = new THREE.Fog(0x07110f, 40, 120);
+
+const camera = new THREE.PerspectiveCamera(settings.fov, innerWidth / innerHeight, 0.1, 200);
+const clock = new THREE.Clock();
+
+// Lights
+scene.add(new THREE.AmbientLight(0x8eaea4, 0.45));
+const sun = new THREE.DirectionalLight(0xd7efe6, 1.15);
+sun.position.set(-20, 30, 12);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 80;
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+scene.add(sun);
+const fill = new THREE.PointLight(0x3ddeb0, 0.35, 40);
+fill.position.set(SITE.x, 6, SITE.z);
+scene.add(fill);
+
+// Ground
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0c1815, roughness: 0.95, metalness: 0.05 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.w, WORLD.d), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(Math.max(WORLD.w, WORLD.d), 24, 0x16302a, 0x12241f);
+grid.position.y = 0.01;
+scene.add(grid);
+
+// Walls / borders
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x1b332c, roughness: 0.85 });
+function boxMesh(w, h, d, x, y, z, mat = wallMat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+boxMesh(WORLD.w + 2, 3, 1, 0, 1.5, -WORLD.d / 2);
+boxMesh(WORLD.w + 2, 3, 1, 0, 1.5, WORLD.d / 2);
+boxMesh(1, 3, WORLD.d, -WORLD.w / 2, 1.5, 0);
+boxMesh(1, 3, WORLD.d, WORLD.w / 2, 1.5, 0);
+
+const solids = [];
+const coverMeshes = [];
+const borderSolids = [
+  { x: 0, z: -WORLD.d / 2, hw: WORLD.w / 2 + 2, hd: 0.8 },
+  { x: 0, z: WORLD.d / 2, hw: WORLD.w / 2 + 2, hd: 0.8 },
+  { x: -WORLD.w / 2, z: 0, hw: 0.8, hd: WORLD.d / 2 },
+  { x: WORLD.w / 2, z: 0, hw: 0.8, hd: WORLD.d / 2 },
+];
+function rebuildSolids(covers) {
+  for (const m of coverMeshes) scene.remove(m);
+  coverMeshes.length = 0;
+  solids.length = 0;
+  for (const c of covers) {
+    const m = boxMesh(c.w, c.h, c.d, c.x, c.h / 2, c.z);
+    coverMeshes.push(m);
+    // h: 블록 높이 — 점프로 넘을 수 있음 / 위에 착지 가능
+    solids.push({
+      x: c.x, z: c.z,
+      hw: c.w / 2 + 0.35, hd: c.d / 2 + 0.35,
+      h: c.h, climbable: true,
+    });
+  }
+  for (const b of borderSolids) solids.push({ ...b, h: 99, climbable: false });
+}
+function pickSite(map) {
+  const list = map.sites || [map.site];
+  const s = list[Math.floor(Math.random() * list.length)];
+  SITE.x = s.x; SITE.z = s.z; SITE.r = s.r;
+}
+
+function refreshSiteVisual() {
+  if (typeof siteRing === 'undefined') return;
+  siteRing.position.set(SITE.x, 0.03, SITE.z);
+  siteGlow.position.set(SITE.x, 0.02, SITE.z);
+  siteRing.geometry.dispose();
+  siteRing.geometry = new THREE.RingGeometry(SITE.r - 0.15, SITE.r, 48);
+  siteGlow.geometry.dispose();
+  siteGlow.geometry = new THREE.CircleGeometry(SITE.r, 48);
+  fill.position.set(SITE.x, 6, SITE.z);
+}
+
+function loadMap(i) {
+  mapIndex = ((i % MAPS.length) + MAPS.length) % MAPS.length;
+  const map = MAPS[mapIndex];
+  pickSite(map);
+  SPAWN.x = map.spawn.x; SPAWN.z = map.spawn.z;
+  rebuildSolids(map.covers);
+  refreshSiteVisual();
+}
+rebuildSolids(MAPS[0].covers);
+
+// Site ring
+const siteRing = new THREE.Mesh(
+  new THREE.RingGeometry(SITE.r - 0.15, SITE.r, 48),
+  new THREE.MeshBasicMaterial({ color: 0xe7c98a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+);
+siteRing.rotation.x = -Math.PI / 2;
+siteRing.position.set(SITE.x, 0.03, SITE.z);
+scene.add(siteRing);
+const siteGlow = new THREE.Mesh(
+  new THREE.CircleGeometry(SITE.r, 48),
+  new THREE.MeshBasicMaterial({ color: 0xe7c98a, transparent: true, opacity: 0.08, side: THREE.DoubleSide })
+);
+siteGlow.rotation.x = -Math.PI / 2;
+siteGlow.position.set(SITE.x, 0.02, SITE.z);
+scene.add(siteGlow);
+
+// Player (third-person body)
+const playerGroup = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3ddeb0, roughness: 0.45, metalness: 0.2 });
+const playerBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 6, 12), bodyMat);
+playerBody.position.y = 0.8;
+playerBody.castShadow = true;
+playerGroup.add(playerBody);
+const gun = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7), new THREE.MeshStandardMaterial({ color: 0x10201c }));
+gun.position.set(0.28, 0.95, -0.45);
+playerGroup.add(gun);
+scene.add(playerGroup);
+
+// First-person viewmodel (parented to camera)
+const viewmodel = new THREE.Group();
+const vmMat = new THREE.MeshStandardMaterial({ color: 0x1a2e28, roughness: 0.5, metalness: 0.35 });
+const vmBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.55), vmMat);
+vmBody.position.set(0.22, -0.16, -0.45);
+viewmodel.add(vmBody);
+const vmBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.35), new THREE.MeshStandardMaterial({ color: 0x0a1412 }));
+vmBarrel.position.set(0.22, -0.12, -0.75);
+viewmodel.add(vmBarrel);
+const vmSight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.08), new THREE.MeshStandardMaterial({ color: 0x3ddeb0 }));
+vmSight.position.set(0.22, -0.04, -0.55);
+viewmodel.add(vmSight);
+camera.add(viewmodel);
+scene.add(camera);
+viewmodel.visible = false;
+
+// Bots
+const bots = [];
+const allies = [];
+const botMat = new THREE.MeshStandardMaterial({ color: 0xff6b4a, roughness: 0.5, metalness: 0.15 });
+const allyMat = new THREE.MeshStandardMaterial({ color: 0x4aa8ff, roughness: 0.5, metalness: 0.15 });
+function makeUnit(spawn, team) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.35, 0.9, 6, 12),
+    (team === 'enemy' ? botMat : allyMat).clone()
+  );
+  body.position.y = 0.8;
+  body.castShadow = true;
+  g.add(body);
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 10, 10),
+    new THREE.MeshStandardMaterial({ color: team === 'enemy' ? 0xff8a70 : 0x7ec8ff })
+  );
+  head.position.y = 1.55;
+  g.add(head);
+  const hpBar = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.08),
+    new THREE.MeshBasicMaterial({ color: team === 'enemy' ? 0xff6b4a : 0x4aa8ff })
+  );
+  hpBar.position.y = 1.9;
+  g.add(hpBar);
+  scene.add(g);
+  return {
+    mesh: g,
+    hpBar,
+    x: spawn.x,
+    z: spawn.z,
+    hp: 100,
+    cool: 0.4 + Math.random() * 0.3,
+    defuse: 0,
+    blind: 0,
+    alive: true,
+    team,
+    seed: Math.random() * 10,
+    mode: 'advance', // advance | cover | hold
+    coverX: spawn.x,
+    coverZ: spawn.z,
+    think: Math.random() * 0.8,
+  };
+}
+function spawnAt(list, i, side) {
+  const base = list[i % list.length];
+  const ring = Math.floor(i / list.length);
+  const ang = i * 1.7 + (side === 'enemy' ? 0.4 : -0.4);
+  const rad = ring * 2.2;
+  return {
+    x: base.x + Math.cos(ang) * rad,
+    z: base.z + Math.sin(ang) * rad,
+  };
+}
+function makeBot(i) {
+  const map = MAPS[mapIndex];
+  return makeUnit(spawnAt(map.enemies, i, 'enemy'), 'enemy');
+}
+function makeAlly(i) {
+  const map = MAPS[mapIndex];
+  return makeUnit(spawnAt(map.allies, i, 'ally'), 'ally');
+}
+
+// Bullets / particles
+const bullets = [];
+const particles = [];
+const bulletGeo = new THREE.SphereGeometry(0.07, 6, 6);
+const bulletMatF = new THREE.MeshBasicMaterial({ color: 0xd7efe6 });
+const bulletMatE = new THREE.MeshBasicMaterial({ color: 0xff6b4a });
+
+// Spike visual
+const spike = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.18, 0.28, 0.55, 8),
+  new THREE.MeshStandardMaterial({ color: 0xe7c98a, emissive: 0x44330a, emissiveIntensity: 0.4 })
+);
+spike.visible = false;
+spike.position.y = 0.28;
+scene.add(spike);
+
+// State
+const state = {
+  phase: 'menu', // menu | prep | fight | round | match
+  round: 1,
+  wins: 0,
+  losses: 0,
+  time: 70,
+  prepTime: 15,
+  px: SPAWN.x,
+  py: 0,
+  pz: SPAWN.z,
+  vy: 0,
+  onGround: true,
+  yaw: 0,
+  pitch: 0,
+  fp: true,
+  hp: 100,
+  cool: 0,
+  weapon: 0,
+  agent: 0,
+  abil: { qCool: 0, eCool: 0, cCool: 0, qCh: 2, eCh: 2, cCh: 1 },
+  ult: 0,
+  buff: { dmgMul: 1, speedMul: 1, shield: 0, t: 0, headBonus: 0, ultBonus: 0 },
+  nameBuff: { dmg: 1, speed: 1, head: 0, ult: 0, shield: 0, secret: false, label: '' },
+  playerName: '',
+  allyCount: 2,
+  enemyCount: 3,
+  secCool: 0,
+  zoomed: false,
+  moving: false,
+  modeId: 'classic',
+  modeEventT: 0,
+  modeFlip: false,
+  stormT: 0,
+  online: false,
+  isHost: false,
+  roomCode: '',
+  matchType: 'pvp', // pvp | coop | ai
+  plant: 0,
+  planted: false,
+  fuse: 0,
+  defuse: 0,
+  banner: '',
+  kills: 0,
+  shake: 0,
+};
+const smokes = []; // {x,z,r,life,mesh}
+
+const input = {
+  mx: 0, my: 0,
+  lookX: 0, lookY: 0,
+  fire: false,
+  altFire: false,
+  action: false,
+  jump: false,
+  keys: new Set(),
+};
+
+// UI
+const el = {
+  menu: document.getElementById('menu'),
+  banner: document.getElementById('banner'),
+  round: document.getElementById('round'),
+  wins: document.getElementById('wins'),
+  losses: document.getElementById('losses'),
+  timer: document.getElementById('timer'),
+  timerLabel: document.getElementById('timerLabel'),
+  hp: document.getElementById('hp'),
+  hpBar: document.getElementById('hpBar'),
+  enemies: document.getElementById('enemies'),
+  progressBox: document.getElementById('progressBox'),
+  progressLabel: document.getElementById('progressLabel'),
+  progressFill: document.getElementById('progressFill'),
+  best: document.getElementById('best'),
+  kills: document.getElementById('kills'),
+  stick: document.getElementById('stick'),
+  knob: document.getElementById('knob'),
+  actions: document.getElementById('actions'),
+  movePad: document.getElementById('movePad'),
+  lookPad: document.getElementById('lookPad'),
+  wepCycle: document.getElementById('wepCycle'),
+  btnWepPrev: document.getElementById('btnWepPrev'),
+  btnWepNext: document.getElementById('btnWepNext'),
+  btnWepList: document.getElementById('btnWepList'),
+  weaponBarBackdrop: document.getElementById('weaponBarBackdrop'),
+  btnPlant: document.getElementById('btnPlant'),
+  btnFire: document.getElementById('btnFire'),
+  btnSkill: document.getElementById('btnSkill'),
+  btnJump: document.getElementById('btnJump'),
+  btnSec: document.getElementById('btnSec'),
+  btnStart: document.getElementById('btnStart'),
+  prepOverlay: document.getElementById('prepOverlay'),
+  prepTimer: document.getElementById('prepTimer'),
+  prepWeapons: document.getElementById('prepWeapons'),
+  prepSkills: document.getElementById('prepSkills'),
+  prepCounts: document.getElementById('prepCounts'),
+  btnBeginFight: document.getElementById('btnBeginFight'),
+  playerName: document.getElementById('playerName'),
+  playerPass: document.getElementById('playerPass'),
+  nameBuffHint: document.getElementById('nameBuffHint'),
+  lobbyOverlay: document.getElementById('lobbyOverlay'),
+  btnOpenLobby: document.getElementById('btnOpenLobby'),
+  lobbyName: document.getElementById('lobbyName'),
+  friendList: document.getElementById('friendList'),
+  hostModeSelect: document.getElementById('hostModeSelect'),
+  btnHostCreate: document.getElementById('btnHostCreate'),
+  hostRoomCode: document.getElementById('hostRoomCode'),
+  hostRoomInfo: document.getElementById('hostRoomInfo'),
+  joinRoomCode: document.getElementById('joinRoomCode'),
+  btnJoinRoom: document.getElementById('btnJoinRoom'),
+  lobbyPlayers: document.getElementById('lobbyPlayers'),
+  btnLobbyStart: document.getElementById('btnLobbyStart'),
+  btnLobbyClose: document.getElementById('btnLobbyClose'),
+  lobbyStatus: document.getElementById('lobbyStatus'),
+  matchTypeSelect: document.getElementById('matchTypeSelect'),
+  netBadge: document.getElementById('netBadge'),
+  btnView: document.getElementById('btnView'),
+  crosshair: document.getElementById('crosshair'),
+  weaponBar: document.getElementById('weaponBar'),
+  weaponInfo: document.getElementById('weaponInfo'),
+  btnSettings: document.getElementById('btnSettings'),
+  btnOpenSettings: document.getElementById('btnOpenSettings'),
+  settingsOverlay: document.getElementById('settingsOverlay'),
+  btnCloseSettings: document.getElementById('btnCloseSettings'),
+  btnResetSettings: document.getElementById('btnResetSettings'),
+  setMap: document.getElementById('setMap'),
+  setMove: document.getElementById('setMove'),
+  setMouse: document.getElementById('setMouse'),
+  setTouch: document.getElementById('setTouch'),
+  setPitch: document.getElementById('setPitch'),
+  setFov: document.getElementById('setFov'),
+  setStick: document.getElementById('setStick'),
+  valMap: document.getElementById('valMap'),
+  valMove: document.getElementById('valMove'),
+  valMouse: document.getElementById('valMouse'),
+  valTouch: document.getElementById('valTouch'),
+  valPitch: document.getElementById('valPitch'),
+  valFov: document.getElementById('valFov'),
+  valStick: document.getElementById('valStick'),
+  btnOpenAdmin: document.getElementById('btnOpenAdmin'),
+  adminOverlay: document.getElementById('adminOverlay'),
+  adminGate: document.getElementById('adminGate'),
+  adminEditor: document.getElementById('adminEditor'),
+  adminPass: document.getElementById('adminPass'),
+  adminCode: document.getElementById('adminCode'),
+  adminLog: document.getElementById('adminLog'),
+  adminGateLog: document.getElementById('adminGateLog'),
+  adminMapList: document.getElementById('adminMapList'),
+  btnAdminLogin: document.getElementById('btnAdminLogin'),
+  btnAdminClose1: document.getElementById('btnAdminClose1'),
+  btnAdminClose2: document.getElementById('btnAdminClose2'),
+  btnAdminRun: document.getElementById('btnAdminRun'),
+  btnAdminTemplate: document.getElementById('btnAdminTemplate'),
+  btnAdminClearCustom: document.getElementById('btnAdminClearCustom'),
+};
+
+function syncSettingsUI() {
+  el.setMap.value = settings.mapScale;
+  el.setMove.value = settings.moveSpeed;
+  el.setMouse.value = settings.mouseSens;
+  el.setTouch.value = settings.touchSens;
+  el.setPitch.value = settings.pitchMax;
+  el.setFov.value = settings.fov;
+  el.setStick.value = settings.stickSens;
+  el.valMap.textContent = `${Number(settings.mapScale).toFixed(1)}x`;
+  el.valMove.textContent = String(settings.moveSpeed);
+  el.valMouse.textContent = String(settings.mouseSens);
+  el.valTouch.textContent = String(settings.touchSens);
+  el.valPitch.textContent = String(settings.pitchMax);
+  el.valFov.textContent = String(settings.fov);
+  el.valStick.textContent = String(settings.stickSens);
+}
+
+function readSettingsFromUI() {
+  settings.mapScale = Number(el.setMap.value);
+  settings.moveSpeed = Number(el.setMove.value);
+  settings.mouseSens = Number(el.setMouse.value);
+  settings.touchSens = Number(el.setTouch.value);
+  settings.pitchMax = Number(el.setPitch.value);
+  settings.fov = Number(el.setFov.value);
+  settings.stickSens = Number(el.setStick.value);
+}
+
+function applyLiveSettings() {
+  camera.fov = settings.fov;
+  camera.updateProjectionMatrix();
+  applyViewMode();
+}
+
+function openSettings() {
+  syncSettingsUI();
+  el.settingsOverlay.classList.remove('hidden');
+}
+function closeSettings(save) {
+  const prevMap = settings.mapScale;
+  if (save) {
+    readSettingsFromUI();
+    saveSettings(settings);
+    applyLiveSettings();
+    // ë§µ í¬ê¸°ë ì§ì¤ë©í¸ë¦¬ ì¬êµ¬ì±ì´ íìí´ ìë¡ê³ ì¹¨
+    if (Math.abs(prevMap - settings.mapScale) > 0.01) {
+      location.reload();
+      return;
+    }
+  }
+  el.settingsOverlay.classList.add('hidden');
+}
+
+syncSettingsUI();
+applyLiveSettings();
+buildWeaponBar();
+
+[
+  ['setMap', 'valMap', (v) => `${Number(v).toFixed(1)}x`],
+  ['setMove', 'valMove', (v) => String(v)],
+  ['setMouse', 'valMouse', (v) => String(v)],
+  ['setTouch', 'valTouch', (v) => String(v)],
+  ['setPitch', 'valPitch', (v) => String(v)],
+  ['setFov', 'valFov', (v) => String(v)],
+  ['setStick', 'valStick', (v) => String(v)],
+].forEach(([input, val, fmt]) => {
+  el[input].addEventListener('input', () => {
+    el[val].textContent = fmt(el[input].value);
+  });
+});
+el.btnSettings.addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+el.btnOpenSettings.addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+el.btnCloseSettings.addEventListener('click', () => closeSettings(true));
+el.btnResetSettings.addEventListener('click', () => {
+  Object.assign(settings, DEFAULT_SETTINGS);
+  syncSettingsUI();
+});
+el.settingsOverlay.addEventListener('click', (e) => {
+  if (e.target === el.settingsOverlay) closeSettings(true);
+});
+
+function pitchLimits() {
+  if (state.fp) return { min: -settings.pitchMax, max: settings.pitchMax };
+  return { min: -Math.min(0.5, settings.pitchMax * 0.4), max: Math.min(0.85, settings.pitchMax * 0.65) };
+}
+
+function resolveNameBuffs() {
+  const raw = (el.playerName?.value || '').trim();
+  const pass = (el.playerPass?.value || '').trim();
+  state.playerName = raw;
+  const n = raw.replace(/\s+/g, '');
+  const buff = { dmg: 1, speed: 1, head: 0, ult: 0, shield: 0, secret: false, label: '' };
+  const tags = [];
+  if (n === 'íì±ì±') {
+    buff.dmg = 1.15; buff.speed = 1.1; tags.push('íì±ì±: ë°ë¯¸ì§+15% ì´ì+10%');
+  }
+  if (n === 'ì¥ì°ì±') {
+    buff.head = 0.5; buff.ult = 1; tags.push('ì¥ì°ì±: í¤ëì· ê°í Â· ê¶ ì¶©ì +');
+  }
+  if (n === 'ë§ë¦¬ì¥ì°ì±') {
+    buff.dmg = 1.2; buff.speed = 1.12; buff.head = 0.5; buff.ult = 1; buff.shield = 25; buff.secret = true;
+    tags.push('ë§ë¦¬ì¥ì°ì±: ì¢í© ë²í Â· ë§ë¦¬ì¥ê² í´ê¸');
+  }
+  if (pass === 'ë§ë¦¬ì¥ì±' || pass === 'sitehold' || pass === 'ì±ì±') {
+    buff.secret = true;
+    if (buff.shield < 15) buff.shield = 15;
+    tags.push('ë¹ë°ë²í¸: ìí¬ë¦¿ ë¬´ê¸° í´ê¸');
+  }
+  buff.label = tags.join(' Â· ') || 'ì¼ë° íë ì´ì´';
+  state.nameBuff = buff;
+  if (el.nameBuffHint) el.nameBuffHint.textContent = buff.label;
+  return buff;
+}
+
+function availableWeapons() {
+  const list = WEAPONS.slice();
+  if (state.nameBuff?.secret) list.push(SECRET_WEAPON);
+  return list;
+}
+
+function currentWeapon() {
+  const list = availableWeapons();
+  return list[Math.min(state.weapon, list.length - 1)] || WEAPONS[0];
+}
+
+function updateWeaponUI() {
+  const w = currentWeapon();
+  el.weaponInfo.textContent = `${w.name} Â· ${w.dmg}${w.pellets > 1 ? 'Ã' + w.pellets : ''} Â· ${w.note}`;
+  el.weaponBar.querySelectorAll('button').forEach((btn, i) => {
+    btn.classList.toggle('active', i === state.weapon);
+  });
+  // viewmodel shape/color per weapon
+  vmBody.material.color.setHex(w.color);
+  vmBarrel.material.color.setHex(w.accent || 0x0a1412);
+  vmSight.material.color.setHex(w.accent || 0x3ddeb0);
+  const sh = w.shape || 'rifle';
+  if (w.melee || sh === 'knife') {
+    vmBody.scale.set(0.35, 0.9, 1.1);
+    vmBarrel.scale.set(0.35, 0.2, 1.8);
+    vmBarrel.position.set(0.22, -0.1, -0.55);
+    vmSight.visible = false;
+    gun.scale.set(0.4, 0.5, 0.9);
+  } else if (sh === 'pistol') {
+    vmBody.scale.set(0.7, 0.8, 0.55);
+    vmBarrel.scale.set(0.7, 0.7, 0.7);
+    vmBarrel.position.set(0.22, -0.12, -0.55);
+    vmSight.visible = true;
+    gun.scale.set(0.6, 0.6, 0.5);
+  } else if (sh === 'shotgun') {
+    vmBody.scale.set(1.15, 1.05, 0.9);
+    vmBarrel.scale.set(1.2, 1.1, 1.0);
+    vmBarrel.position.set(0.22, -0.12, -0.7);
+    vmSight.visible = true;
+    gun.scale.set(1.1, 1.0, 0.9);
+  } else if (sh === 'sniper') {
+    vmBody.scale.set(0.9, 0.85, 1.4);
+    vmBarrel.scale.set(0.7, 0.7, 1.8);
+    vmBarrel.position.set(0.22, -0.12, -1.05);
+    vmSight.visible = true;
+    gun.scale.set(0.9, 0.85, 1.3);
+  } else if (sh === 'lmg') {
+    vmBody.scale.set(1.25, 1.15, 1.2);
+    vmBarrel.scale.set(1.1, 1.0, 1.3);
+    vmBarrel.position.set(0.22, -0.14, -0.9);
+    vmSight.visible = true;
+    gun.scale.set(1.2, 1.1, 1.15);
+  } else if (sh === 'minigun') {
+    vmBody.scale.set(1.45, 1.25, 1.15);
+    vmBarrel.scale.set(1.35, 1.2, 1.55);
+    vmBarrel.position.set(0.22, -0.16, -1.0);
+    vmSight.visible = true;
+    gun.scale.set(1.35, 1.2, 1.25);
+  } else if (sh === 'arc' || sh === 'legend') {
+    vmBody.scale.set(1.0, 1.0, 1.1);
+    vmBarrel.scale.set(0.9, 0.9, 1.4);
+    vmBarrel.position.set(0.22, -0.12, -0.85);
+    vmSight.visible = true;
+    gun.scale.set(1.0, 1.0, 1.05);
+  } else if (sh === 'smg') {
+    vmBody.scale.set(0.85, 0.9, 0.75);
+    vmBarrel.scale.set(0.85, 0.85, 0.9);
+    vmBarrel.position.set(0.22, -0.12, -0.6);
+    vmSight.visible = true;
+    gun.scale.set(0.85, 0.85, 0.75);
+  } else {
+    vmBody.scale.set(1, 1, w.length / 0.55);
+    vmBarrel.scale.set(1, 1, Math.max(0.5, w.length / 0.45));
+    vmBarrel.position.set(0.22, -0.12, -0.45 - w.length * 0.45);
+    vmSight.visible = true;
+    gun.scale.set(1, 1, w.length / 0.55);
+  }
+  const secName = w.sec ? w.sec.name : '-';
+  if (el.weaponInfo) el.weaponInfo.textContent = `${w.name} Â· ${secName}`;
+  if (el.btnWepList) el.btnWepList.textContent = w.name;
+}
+
+function setWeapon(index) {
+  const list = availableWeapons();
+  if (index < 0 || index >= list.length) return;
+  state.weapon = index;
+  state.cool = Math.max(state.cool, 0.12);
+  state.zoomed = false;
+  if (!state.fp) camera.fov = settings.fov;
+  camera.updateProjectionMatrix();
+  updateWeaponUI();
+  closeWeaponList();
+}
+
+function cycleWeapon(dir) {
+  const list = availableWeapons();
+  if (!list.length) return;
+  const next = (state.weapon + dir + list.length) % list.length;
+  setWeapon(next);
+}
+
+function openWeaponList() {
+  if (state.phase !== 'fight') return;
+  el.weaponBar?.classList.add('open');
+  el.weaponBarBackdrop?.classList.add('open');
+}
+function closeWeaponList() {
+  el.weaponBar?.classList.remove('open');
+  el.weaponBarBackdrop?.classList.remove('open');
+}
+function toggleWeaponList() {
+  if (el.weaponBar?.classList.contains('open')) closeWeaponList();
+  else openWeaponList();
+}
+
+function buildWeaponBar() {
+  el.weaponBar.innerHTML = '';
+  availableWeapons().forEach((w, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = `<span class="key">${w.key || 'Â·'}</span>${w.name}`;
+    const pick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setWeapon(i);
+    };
+    b.addEventListener('pointerdown', pick);
+    b.addEventListener('click', pick);
+    el.weaponBar.appendChild(b);
+  });
+  updateWeaponUI();
+  closeWeaponList();
+}
+
+function applyViewMode() {
+  playerGroup.visible = !state.fp;
+  viewmodel.visible = state.fp && state.phase === 'fight';
+  el.crosshair.classList.toggle('hidden', !(state.fp && state.phase === 'fight'));
+  el.btnView.textContent = state.fp ? '3ì¸ì¹­ Â· V' : '1ì¸ì¹­ Â· V';
+  const lim = pitchLimits();
+  state.pitch = Math.max(lim.min, Math.min(lim.max, state.pitch));
+}
+
+function toggleView() {
+  state.fp = !state.fp;
+  applyViewMode();
+}
+
+function loadBest() {
+  try { return Number(localStorage.getItem(BEST_KEY) || 0); } catch { return 0; }
+}
+function saveBest(v) {
+  try { localStorage.setItem(BEST_KEY, String(v)); } catch {}
+}
+el.best.textContent = String(loadBest());
+
+function resolve(x, z, feetY = 0) {
+  for (const s of solids) {
+    const top = s.h != null ? s.h : 99;
+    // ë°ì´ ë¸ë¡ ìë³´ë¤ ëì¼ë©´ ëì´ì íµê³¼
+    if (feetY + 0.12 >= top) continue;
+    const ox = Math.abs(x - s.x) - s.hw;
+    const oz = Math.abs(z - s.z) - s.hd;
+    if (ox < 0 && oz < 0) {
+      if (Math.abs(ox) < Math.abs(oz)) x += (x > s.x ? -ox : ox);
+      else z += (z > s.z ? -oz : oz);
+    }
+  }
+  x = Math.max(-WORLD.w / 2 + 0.8, Math.min(WORLD.w / 2 - 0.8, x));
+  z = Math.max(-WORLD.d / 2 + 0.8, Math.min(WORLD.d / 2 - 0.8, z));
+  return { x, z };
+}
+
+function supportHeight(x, z) {
+  let best = 0;
+  for (const s of solids) {
+    if (!s.climbable) continue;
+    if (Math.abs(x - s.x) < s.hw - 0.05 && Math.abs(z - s.z) < s.hd - 0.05) {
+      if (s.h > best) best = s.h;
+    }
+  }
+  return best;
+}
+
+function blocked(x0, z0, x1, z1) {
+  for (let i = 1; i <= 10; i++) {
+    const t = i / 10;
+    const x = x0 + (x1 - x0) * t;
+    const z = z0 + (z1 - z0) * t;
+    for (const s of solids) {
+      if (Math.abs(x - s.x) < s.hw - 0.2 && Math.abs(z - s.z) < s.hd - 0.2) return true;
+    }
+    for (const sm of smokes) {
+      if (Math.hypot(x - sm.x, z - sm.z) < sm.r * 0.85) return true;
+    }
+  }
+  return false;
+}
+
+function spawnBullet(x, y, z, dirX, dirY, dirZ, friendly, dmg, speed, color, flags) {
+  const mat = color != null
+    ? new THREE.MeshBasicMaterial({ color })
+    : (friendly ? bulletMatF : bulletMatE);
+  const mesh = new THREE.Mesh(bulletGeo, mat);
+  mesh.position.set(x, y, z);
+  if (flags?.wave) mesh.scale.set(2.2, 2.2, 2.2);
+  scene.add(mesh);
+  bullets.push({
+    mesh,
+    vx: dirX * speed, vy: dirY * speed, vz: dirZ * speed,
+    life: flags?.wave ? 1.2 : 0.9,
+    friendly, dmg,
+    flash: !!flags?.flash,
+    chain: !!flags?.chain,
+    wave: !!flags?.wave,
+  });
+  // ì¨ë¼ì¸: ë´ ì´ìì ìëìê² ëê¸°í
+  if (friendly && state.online && state.phase === 'fight' && !flags?.noNet) {
+    broadcast({
+      type: 'shoot',
+      x, y, z,
+      dx: dirX, dy: dirY, dz: dirZ,
+      dmg, speed: speed,
+    });
+  }
+}
+
+function zoneMult(hitY) {
+  const headBase = typeof modeHeadMul === 'function' ? modeHeadMul() : HEAD_MULT;
+  // ë¹í¤ë ëª¨ëë ë¨¸ë¦¬ íì  ë²ìë ëê²
+  const headLine = state.modeId === 'bighead' ? 1.15 : 1.38;
+  if (hitY >= headLine) return headBase + (state.buff?.headBonus || state.nameBuff?.head || 0);
+  if (hitY < 0.72) return LEG_MULT;
+  return BODY_MULT;
+}
+
+function findCoverPoint(x, z, threatX, threatZ) {
+  let best = null;
+  let bestScore = -1e9;
+  for (const s of solids) {
+    if (s.hw > 20 || s.hd > 20) continue; // skip borders
+    const offsets = [
+      [s.hw + 1.2, 0], [-s.hw - 1.2, 0], [0, s.hd + 1.2], [0, -s.hd - 1.2],
+      [s.hw + 1.0, s.hd + 1.0], [-s.hw - 1.0, -s.hd - 1.0],
+    ];
+    for (const [ox, oz] of offsets) {
+      const cx = s.x + ox;
+      const cz = s.z + oz;
+      if (Math.abs(cx) > WORLD.w / 2 - 2 || Math.abs(cz) > WORLD.d / 2 - 2) continue;
+      const covered = blocked(cx, cz, threatX, threatZ);
+      const dist = Math.hypot(cx - x, cz - z);
+      const away = Math.hypot(cx - threatX, cz - threatZ);
+      const score = (covered ? 12 : -4) - dist * 0.55 + away * 0.08;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x: cx, z: cz };
+      }
+    }
+  }
+  return best;
+}
+
+function applyDamageToUnit(unit, baseDmg, hitY) {
+  const mult = zoneMult(hitY);
+  const dmg = baseDmg * mult;
+  unit.hp -= dmg;
+  burst(unit.x, hitY, unit.z, mult >= 2 ? 12 : 7, mult >= 2 ? 0xffe08a : 0xff6b4a);
+  if (state.modeId === 'vampire' && unit.team === 'enemy' && state.hp > 0) {
+    state.hp = Math.min(100, state.hp + dmg * 0.2);
+  }
+  return { dmg, mult };
+}
+
+function burst(x, y, z, n, color) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.08),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    m.position.set(x, y, z);
+    scene.add(m);
+    const a = Math.random() * Math.PI * 2;
+    const v = 2 + Math.random() * 4;
+    particles.push({
+      mesh: m,
+      vx: Math.cos(a) * v,
+      vy: 1 + Math.random() * 3,
+      vz: Math.sin(a) * v,
+      life: 0.3 + Math.random() * 0.3,
+    });
+  }
+}
+
+function clearBots() {
+  for (const b of bots) scene.remove(b.mesh);
+  bots.length = 0;
+}
+function clearAllies() {
+  for (const a of allies) scene.remove(a.mesh);
+  allies.length = 0;
+}
+
+function clearSmokes() {
+  for (const s of smokes) {
+    if (s.mesh) scene.remove(s.mesh);
+  }
+  smokes.length = 0;
+}
+
+function buildPrepUI() {
+  resolveNameBuffs();
+  // ìë¡/ì¨ë¼ì¸ ê³µíµ ëª¨ë ì í (ì¨ë¼ì¸ ì°¸ê°ìë í¸ì¤í¸ ëª¨ë ê³ ì )
+  if (el.prepSkills && !document.getElementById('prepModeBox')) {
+    // injected once into prep weapons header area via counts tip
+  }
+  if (el.prepCounts) {
+    el.prepCounts.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;width:100%;align-items:flex-end';
+    const mkField = (label, id, value, onChange) => {
+      const box = document.createElement('label');
+      box.style.cssText = 'flex:1;min-width:120px;font-size:12px;color:var(--muted)';
+      box.innerHTML = `${label}<br/>`;
+      const input = document.createElement('input');
+      input.id = id;
+      input.type = 'number';
+      input.min = '0';
+      input.max = '10';
+      input.step = '1';
+      input.value = String(value);
+      input.style.cssText = 'width:100%;margin-top:4px;height:40px;border-radius:12px;border:1px solid var(--border);background:rgba(7,17,15,0.7);color:var(--fg);padding:0 12px;font-size:16px;font-weight:700';
+      input.addEventListener('change', () => {
+        let v = parseInt(input.value, 10);
+        if (Number.isNaN(v)) v = 0;
+        v = Math.max(0, Math.min(10, v));
+        input.value = String(v);
+        onChange(v);
+      });
+      input.addEventListener('input', () => {
+        let v = parseInt(input.value, 10);
+        if (Number.isNaN(v)) return;
+        v = Math.max(0, Math.min(10, v));
+        onChange(v);
+      });
+      box.appendChild(input);
+      return box;
+    };
+    wrap.appendChild(mkField('아군 AI 수', 'allyCountInput', state.allyCount, (v) => { state.allyCount = v; }));
+    wrap.appendChild(mkField('적 AI 수', 'enemyCountInput', state.enemyCount, (v) => { state.enemyCount = v; }));
+    const tip = document.createElement('div');
+    tip.style.cssText = 'width:100%;font-size:11px;color:var(--muted)';
+    tip.textContent = '직접 숫자를 입력하세요 (0~10). 예: 아군 2 · 적 5';
+    el.prepCounts.appendChild(wrap);
+    el.prepCounts.appendChild(tip);
+    const modeBox = document.createElement('div');
+    modeBox.style.cssText = 'width:100%;margin-top:10px';
+    const modeLab = document.createElement('div');
+    modeLab.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:4px';
+    modeLab.textContent = state.online && !state.isHost
+      ? `모드 (호스트 강제): ${currentMode().name}`
+      : '게임 모드';
+    const modeSel = document.createElement('select');
+    modeSel.style.cssText = 'width:100%;height:40px;border-radius:12px;border:1px solid var(--border);background:rgba(7,17,15,0.7);color:var(--fg);padding:0 12px';
+    modeSel.innerHTML = GAME_MODES.map((m) =>
+      `<option value="${m.id}">${m.name} — ${m.desc}</option>`
+    ).join('');
+    modeSel.value = state.modeId;
+    modeSel.disabled = state.online && !state.isHost;
+    modeSel.addEventListener('change', () => {
+      state.modeId = modeSel.value;
+      if (state.isHost) broadcast({ type: 'setMode', modeId: state.modeId });
+    });
+    modeBox.appendChild(modeLab);
+    modeBox.appendChild(modeSel);
+    el.prepCounts.appendChild(modeBox);
+  }
+  el.prepWeapons.innerHTML = '';
+  MAPS.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === mapIndex ? 'active' : '';
+    b.innerHTML = `맵 · ${m.name}<small>사이트 ${m.sites.length}곳</small>`;
+    b.addEventListener('click', () => {
+      loadMap(i);
+      buildPrepUI();
+    });
+    el.prepWeapons.appendChild(b);
+  });
+  availableWeapons().forEach((w, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === state.weapon ? 'active' : '';
+    const sec = w.sec ? w.sec.name : '-';
+    b.innerHTML = `${w.name}<small>${w.note} · RMB ${sec}</small>`;
+    b.addEventListener('click', () => {
+      setWeapon(i);
+      buildPrepUI();
+    });
+    el.prepWeapons.appendChild(b);
+  });
+  el.prepSkills.innerHTML = '';
+  AGENTS.forEach((ag, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = i === state.agent ? 'active' : '';
+    b.innerHTML = `${ag.name}<small>Q ${ag.q.name} · E ${ag.e.name} · C ${ag.c.name}<br>X ${ag.x.name} (${ag.x.cost})</small>`;
+    b.addEventListener('click', () => {
+      state.agent = i;
+      resetAbilities();
+      buildPrepUI();
+      updateSkillButton();
+    });
+    el.prepSkills.appendChild(b);
+  });
+}
+
+function currentAgent() {
+  return AGENTS[state.agent] || AGENTS[0];
+}
+
+function currentMode() {
+  return GAME_MODES.find((m) => m.id === state.modeId) || GAME_MODES[0];
+}
+
+// —— 온라인 (PeerJS P2P) ——
+const net = {
+  peer: null,
+  conn: null, // single guest connection for simplicity; host keeps map
+  hostConns: new Map(), // peerId -> DataConnection
+  remotes: new Map(), // id -> { mesh, name, x, z, yaw, hp }
+  lastSend: 0,
+};
+
+function setLobbyStatus(msg) {
+  if (el.lobbyStatus) el.lobbyStatus.textContent = msg;
+}
+function updateNetBadge() {
+  if (!el.netBadge) return;
+  if (!state.online) {
+    el.netBadge.classList.add('hidden');
+    return;
+  }
+  el.netBadge.classList.remove('hidden');
+  el.netBadge.classList.add('on');
+  const mode = currentMode().name;
+  el.netBadge.textContent = state.isHost
+    ? `호스트 · ${state.roomCode} · ${mode} · ${1 + net.hostConns.size}인`
+    : `참가 · ${state.roomCode} · ${mode}`;
+}
+
+function renderFriends() {
+  if (!el.friendList) return;
+  const list = loadFriends();
+  el.friendList.innerHTML = list.length
+    ? list.map((f) => `<span class="friend-chip">${f.name}${f.code ? ' · ' + f.code.slice(0, 8) : ''} <button type="button" data-code="${f.code || ''}" class="friend-join" style="border:0;background:transparent;color:var(--primary);cursor:pointer">참가</button></span>`).join('')
+    : '<span style="color:var(--muted);font-size:12px">아직 친구가 없습니다. 같이 플레이하면 추가됩니다.</span>';
+  el.friendList.querySelectorAll('.friend-join').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-code');
+      if (code && el.joinRoomCode) {
+        el.joinRoomCode.value = code;
+        joinRoom();
+      }
+    });
+  });
+}
+
+function fillModeSelect() {
+  if (!el.hostModeSelect) return;
+  el.hostModeSelect.innerHTML = GAME_MODES.map((m) =>
+    `<option value="${m.id}">${m.name} — ${m.desc}</option>`
+  ).join('');
+  el.hostModeSelect.value = state.modeId;
+}
+
+function broadcast(msg) {
+  const data = JSON.stringify(msg);
+  if (state.isHost) {
+    for (const c of net.hostConns.values()) {
+      if (c.open) c.send(data);
+    }
+  } else if (net.conn && net.conn.open) {
+    net.conn.send(data);
+  }
+}
+
+function ensureRemote(id, name) {
+  if (net.remotes.has(id)) return net.remotes.get(id);
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.35, 0.9, 6, 12),
+    new THREE.MeshStandardMaterial({ color: 0x3ddeb0 })
+  );
+  body.position.y = 0.8;
+  g.add(body);
+  const label = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 0.2),
+    new THREE.MeshBasicMaterial({ color: 0x3ddeb0, transparent: true, opacity: 0.8 })
+  );
+  label.position.y = 2.0;
+  g.add(label);
+  scene.add(g);
+  const isEnemy = state.matchType === 'pvp';
+  body.material.color.setHex(isEnemy ? 0xff6b4a : 0x3ddeb0);
+  const rec = { id, name: name || (isEnemy ? '상대' : '동료'), mesh: g, x: SPAWN.x, z: SPAWN.z, yaw: 0, hp: 100, team: isEnemy ? 'b' : 'a' };
+  net.remotes.set(id, rec);
+  return rec;
+}
+
+function removeRemote(id) {
+  const r = net.remotes.get(id);
+  if (r) {
+    scene.remove(r.mesh);
+    net.remotes.delete(id);
+  }
+}
+
+function handleNetMessage(fromId, raw) {
+  let msg;
+  try { msg = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
+  if (msg.type === 'hello') {
+    addFriend(msg.name, fromId);
+    renderFriends();
+    if (state.isHost) {
+      const c = net.hostConns.get(fromId);
+      if (c && c.open) {
+        c.send(JSON.stringify({
+          type: 'welcome',
+          modeId: state.modeId,
+          hostName: (el.lobbyName?.value || el.playerName?.value || '호스트'),
+          players: listLobbyPlayers(),
+        }));
+      }
+      refreshLobbyPlayers();
+    }
+  } else if (msg.type === 'welcome') {
+    state.modeId = msg.modeId || 'classic';
+    if (el.hostModeSelect) el.hostModeSelect.value = state.modeId;
+    setLobbyStatus(`호스트 모드: ${currentMode().name} — ${currentMode().desc}`);
+    updateNetBadge();
+  } else if (msg.type === 'setMode') {
+    if (!state.isHost) {
+      state.modeId = msg.modeId;
+      if (el.hostModeSelect) el.hostModeSelect.value = state.modeId;
+      setLobbyStatus(`호스트가 모드 변경: ${currentMode().name}`);
+      updateNetBadge();
+    }
+  } else if (msg.type === 'lobby') {
+    if (el.lobbyPlayers) el.lobbyPlayers.textContent = (msg.players || []).join(' · ');
+  } else if (msg.type === 'startRaid') {
+    state.modeId = msg.modeId || state.modeId;
+    state.matchType = msg.matchType || state.matchType || 'pvp';
+    state.allyCount = msg.allyCount ?? state.allyCount;
+    state.enemyCount = msg.enemyCount ?? state.enemyCount;
+    mapIndex = msg.mapIndex ?? mapIndex;
+    loadMap(mapIndex);
+    if (state.phase === 'menu' || state.phase === 'prep' || state.phase === 'round' || state.phase === 'match') {
+      el.lobbyOverlay?.classList.add('hidden');
+      el.menu?.classList.add('hidden');
+      state.phase = 'prep';
+      beginRound();
+      setTimeout(() => {
+        if (state.phase === 'prep') beginFight();
+      }, 400);
+    }
+  } else if (msg.type === 'pose') {
+    const r = ensureRemote(fromId, msg.name);
+    r.x = msg.x; r.z = msg.z; r.yaw = msg.yaw; r.hp = msg.hp;
+    r.team = msg.team || r.team || 'b';
+    r.mesh.position.set(r.x, r.py || 0, r.z);
+    r.mesh.rotation.y = r.yaw;
+  } else if (msg.type === 'shoot') {
+    // PvP: 상대 총알은 아군 취급 안 함 → 나에게 피해
+    const asFriendly = state.matchType === 'coop';
+    spawnBullet(msg.x, msg.y, msg.z, msg.dx, msg.dy, msg.dz, asFriendly, msg.dmg || 18, msg.speed || 36);
+  } else if (msg.type === 'hitYou') {
+    const myId = net.peer?.id;
+    if (msg.target && myId && msg.target !== myId) {
+      // 다른 사람 대상이면 호스트가 해당 연결로만 전달
+      if (state.isHost) {
+        const c = net.hostConns.get(msg.target);
+        if (c && c.open) c.send(JSON.stringify(msg));
+      }
+      return;
+    }
+    if (state.phase === 'fight' && state.hp > 0) {
+      let dmg = msg.dmg || 20;
+      if (state.buff.shield > 0) {
+        const use = Math.min(state.buff.shield, dmg);
+        state.buff.shield -= use;
+        dmg -= use;
+      }
+      state.hp -= dmg;
+      state.shake = Math.max(state.shake, 0.25);
+      if (state.hp <= 0) state.hp = 0;
+    }
+  }
+}
+
+function listLobbyPlayers() {
+  const me = el.lobbyName?.value || el.playerName?.value || '나';
+  const names = [me + (state.isHost ? '(호스트)' : '')];
+  if (state.isHost) {
+    for (const [id, c] of net.hostConns) {
+      names.push((c.peerName || id.slice(0, 6)) + '(참가)');
+    }
+  }
+  return names;
+}
+
+function refreshLobbyPlayers() {
+  const names = listLobbyPlayers();
+  if (el.lobbyPlayers) el.lobbyPlayers.textContent = names.join(' · ');
+  broadcast({ type: 'lobby', players: names });
+  updateNetBadge();
+}
+
+function normalizeRoomCode(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9_-]/g, '');
+}
+
+function createHostRoom() {
+  if (typeof Peer === 'undefined') {
+    setLobbyStatus('PeerJS 로드 실패. 네트워크를 확인하세요.');
+    return;
+  }
+  const code = normalizeRoomCode(el.hostRoomCode?.value);
+  if (!code || code.length < 3) {
+    setLobbyStatus('방 코드를 3자 이상 입력하세요. (영문/숫자/_/-)');
+    return;
+  }
+  if (code.length > 24) {
+    setLobbyStatus('방 코드는 24자 이하로 입력하세요.');
+    return;
+  }
+  cleanupNet();
+  state.isHost = true;
+  state.online = true;
+  state.modeId = el.hostModeSelect?.value || 'classic';
+  state.roomCode = code;
+  setLobbyStatus(`방 코드 "${code}" 로 호스트 연결 중...`);
+  // 직접 정한 코드를 Peer ID 로 사용
+  net.peer = new Peer(code, { debug: 0 });
+  net.peer.on('open', (id) => {
+    state.roomCode = id;
+    if (el.hostRoomInfo) {
+      el.hostRoomInfo.textContent = `방 준비 완료 · 코드: ${id}  (이 코드를 친구에게 알려주세요)`;
+    }
+    if (el.btnLobbyStart) el.btnLobbyStart.disabled = false;
+    setLobbyStatus(`방 생성됨: ${id}`);
+    updateNetBadge();
+    refreshLobbyPlayers();
+  });
+  net.peer.on('connection', (conn) => {
+    net.hostConns.set(conn.peer, conn);
+    conn.on('data', (d) => {
+      try {
+        const msg = typeof d === 'string' ? JSON.parse(d) : d;
+        if (msg.type === 'hello') conn.peerName = msg.name;
+      } catch {}
+      handleNetMessage(conn.peer, d);
+    });
+    conn.on('close', () => {
+      net.hostConns.delete(conn.peer);
+      removeRemote(conn.peer);
+      refreshLobbyPlayers();
+    });
+    conn.on('open', () => {
+      refreshLobbyPlayers();
+    });
+  });
+  net.peer.on('error', (err) => {
+    const t = err?.type || '';
+    if (t === 'unavailable-id') {
+      setLobbyStatus(`코드 "${code}" 는 이미 사용 중입니다. 다른 코드를 입력하세요.`);
+    } else if (t === 'peer-unavailable') {
+      setLobbyStatus('상대 피어를 찾을 수 없습니다.');
+    } else {
+      setLobbyStatus('오류: ' + (t || err.message || err));
+    }
+    state.online = false;
+    updateNetBadge();
+  });
+}
+
+function joinRoom() {
+  if (typeof Peer === 'undefined') {
+    setLobbyStatus('PeerJS 로드 실패. 네트워크를 확인하세요.');
+    return;
+  }
+  const code = normalizeRoomCode(el.joinRoomCode?.value);
+  if (!code || code.length < 3) {
+    setLobbyStatus('호스트가 정한 방 코드를 입력하세요. (3자 이상)');
+    return;
+  }
+  cleanupNet();
+  state.isHost = false;
+  state.online = true;
+  state.roomCode = code;
+  setLobbyStatus(`"${code}" 방에 참가 중...`);
+  // 게스트는 임시 ID, 호스트 코드로 connect
+  net.peer = new Peer({ debug: 0 });
+  net.peer.on('open', () => {
+    net.conn = net.peer.connect(code, { reliable: true });
+    net.conn.on('open', () => {
+      const name = el.lobbyName?.value || el.playerName?.value || '게스트';
+      net.conn.send(JSON.stringify({ type: 'hello', name }));
+      addFriend(name, code);
+      setLobbyStatus(`연결됨 · 방 코드 ${code} · 호스트 시작을 기다리세요.`);
+      if (el.btnLobbyStart) el.btnLobbyStart.disabled = true;
+      updateNetBadge();
+      renderFriends();
+    });
+    net.conn.on('data', (d) => handleNetMessage(code, d));
+    net.conn.on('close', () => {
+      setLobbyStatus('연결 종료');
+      state.online = false;
+      updateNetBadge();
+    });
+    net.conn.on('error', (err) => {
+      setLobbyStatus('연결 오류: ' + (err?.type || err?.message || err));
+    });
+  });
+  net.peer.on('error', (err) => {
+    const t = err?.type || '';
+    if (t === 'peer-unavailable') {
+      setLobbyStatus(`방 "${code}" 를 찾을 수 없습니다. 호스트가 먼저 방을 만들었는지 확인하세요.`);
+    } else {
+      setLobbyStatus('오류: ' + (t || err.message || err));
+    }
+  });
+}
+
+function cleanupNet() {
+  try { net.conn?.close(); } catch {}
+  for (const c of net.hostConns.values()) {
+    try { c.close(); } catch {}
+  }
+  net.hostConns.clear();
+  for (const id of [...net.remotes.keys()]) removeRemote(id);
+  try { net.peer?.destroy(); } catch {}
+  net.peer = null;
+  net.conn = null;
+  state.online = false;
+  state.isHost = false;
+  state.roomCode = '';
+  updateNetBadge();
+}
+
+function hostStartRaid() {
+  if (!state.isHost) return;
+  state.modeId = el.hostModeSelect?.value || state.modeId;
+  state.matchType = el.matchTypeSelect?.value || state.matchType || 'pvp';
+  // PvP면 봇 최소화, 협동이면 기존 카운트
+  let allyCount = state.allyCount;
+  let enemyCount = state.enemyCount;
+  if (state.matchType === 'pvp') {
+    allyCount = 0;
+    enemyCount = 0;
+  }
+  broadcast({
+    type: 'startRaid',
+    modeId: state.modeId,
+    matchType: state.matchType,
+    allyCount,
+    enemyCount,
+    mapIndex,
+  });
+  state.allyCount = allyCount;
+  state.enemyCount = enemyCount;
+  el.lobbyOverlay?.classList.add('hidden');
+  el.menu?.classList.add('hidden');
+  beginRound();
+  setTimeout(() => {
+    if (state.phase === 'prep') beginFight();
+  }, 400);
+}
+
+function netSendPose(dt) {
+  if (!state.online || state.phase !== 'fight') return;
+  net.lastSend += dt;
+  if (net.lastSend < 0.1) return;
+  net.lastSend = 0;
+  const name = el.lobbyName?.value || el.playerName?.value || '플레이어';
+  broadcast({
+    type: 'pose',
+    name,
+    x: state.px,
+    z: state.pz,
+    yaw: state.yaw,
+    hp: state.hp,
+    team: state.isHost ? 'a' : 'b',
+  });
+}
+
+function applyModeWorld() {
+  const id = state.modeId;
+  if (id === 'fog' || id === 'silent') {
+    scene.fog.near = id === 'silent' ? 12 : 8;
+    scene.fog.far = id === 'silent' ? 36 : 28;
+  } else {
+    scene.fog.near = 40;
+    scene.fog.far = 120;
+  }
+  let scale = 1;
+  if (id === 'tiny') scale = 0.65;
+  if (id === 'giant') scale = 1.45;
+  playerGroup.scale.setScalar(scale);
+  if (id === 'giant' && state.hp <= 100) state.hp = Math.min(150, state.hp + 50);
+}
+
+function modeTick(dt) {
+  const id = state.modeId;
+  if (id === 'chaos' || id === 'roulette') {
+    state.modeEventT -= dt;
+    if (state.modeEventT <= 0) {
+      state.modeEventT = id === 'roulette' ? 8 : 5;
+      const roll = Math.random();
+      if (roll < 0.2) {
+        state.buff.speedMul = 1.6;
+        state.buff.t = Math.max(state.buff.t, 3);
+        state.banner = '이벤트: 과속';
+      } else if (roll < 0.4) {
+        for (const bot of bots) if (bot.alive) bot.blind = 2;
+        state.banner = '이벤트: 섬광';
+      } else if (roll < 0.6) {
+        state.hp = Math.min(id === 'giant' ? 150 : 100, state.hp + 20);
+        state.banner = '이벤트: 회복';
+      } else if (roll < 0.8) {
+        state.shake = 1;
+        state.banner = '이벤트: 지진';
+      } else {
+        state.buff.dmgMul = 1.5;
+        state.buff.t = Math.max(state.buff.t, 4);
+        state.banner = '이벤트: 화력 버프';
+      }
+      updateHud();
+    }
+  }
+  if (id === 'storm') {
+    state.stormT -= dt;
+    if (state.stormT <= 0) {
+      state.stormT = 4 + Math.random() * 3;
+      const sx = (Math.random() - 0.5) * WORLD.w * 0.7;
+      const sz = (Math.random() - 0.5) * WORLD.d * 0.7;
+      burst(sx, 2, sz, 20, 0x66ccff);
+      if (Math.hypot(state.px - sx, state.pz - sz) < 6) {
+        state.hp -= 12;
+        state.shake = 0.8;
+      }
+      for (const bot of bots) {
+        if (bot.alive && Math.hypot(bot.x - sx, bot.z - sz) < 6) bot.hp -= 18;
+      }
+    }
+  }
+  if (id === 'hotpotato' && state.phase === 'fight') {
+    state.time -= dt * 0.35; }
+  if (id === 'silent' && state.phase === 'fight') {
+    state.modeEventT -= dt;
+    if (state.modeEventT <= 0) {
+      state.modeEventT = 7;
+      smokes.push({
+        x: state.px + (Math.random() - 0.5) * 12,
+        z: state.pz + (Math.random() - 0.5) * 12,
+        r: 4.5,
+        life: 5,
+        mesh: null,
+      });
+      const g = new THREE.Mesh(
+        new THREE.SphereGeometry(4.5, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xb0c4bc, transparent: true, opacity: 0.32 })
+      );
+      g.position.set(smokes[smokes.length - 1].x, 1.2, smokes[smokes.length - 1].z);
+      scene.add(g);
+      smokes[smokes.length - 1].mesh = g;
+    }
+  }
+  if (id === 'bounce' && state.onGround && state.phase === 'fight') {
+    // soft hop feel when moving
+    if (state.moving && Math.random() < dt * 0.8) {
+      state.vy = 4.2;
+      state.onGround = false;
+    }
+  }
+}
+
+function modeMoveMul() {
+  const id = state.modeId;
+  if (id === 'rush' || id === 'tiny') return 1.35;
+  if (id === 'lowgrav' || id === 'bounce') return 1.15;
+  if (id === 'giant') return 0.85;
+  return 1;
+}
+
+function modeHeadMul() {
+  return state.modeId === 'bighead' ? 3 : HEAD_MULT;
+}
+function modeDmgMul() {
+  return state.modeId === 'glass' ? 2 : 1;
+}
+
+function resetAbilities() {
+  const a = currentAgent();
+  state.abil = {
+    qCool: 0, eCool: 0, cCool: 0,
+    qCh: a.q.charges, eCh: a.e.charges, cCh: a.c.charges,
+  };
+  state.buff = {
+    dmgMul: state.nameBuff?.dmg || 1,
+    speedMul: state.nameBuff?.speed || 1,
+    shield: state.nameBuff?.shield || 0,
+    t: 0,
+    headBonus: state.nameBuff?.head || 0,
+    ultBonus: state.nameBuff?.ult || 0,
+  };
+}
+
+function updateSkillButton() {
+  const a = currentAgent();
+  const bits = [
+    `Q ${state.abil.qCool > 0 ? state.abil.qCool.toFixed(0) : state.abil.qCh}`,
+    `E ${state.abil.eCool > 0 ? state.abil.eCool.toFixed(0) : state.abil.eCh}`,
+    `C ${state.abil.cCool > 0 ? state.abil.cCool.toFixed(0) : state.abil.cCh}`,
+    `X ${state.ult}/${a.x.cost}`,
+  ];
+  el.btnSkill.textContent = bits.join(' Â· ');
+  el.btnSkill.disabled = state.phase !== 'fight';
+}
+
+function beginRound() {
+  resolveNameBuffs();
+  pickSite(MAPS[mapIndex]);
+  refreshSiteVisual();
+  // ì¤ë¹ ë¨ê³: ë¬´ê¸°/ì¤í¬ ì í
+  state.phase = 'prep';
+  state.prepTime = 18;
+  state.time = 70;
+  state.px = SPAWN.x;
+  state.pz = SPAWN.z;
+  state.yaw = 0;
+  state.pitch = state.fp ? 0 : 0.22;
+  state.hp = 100;
+  state.cool = 0.2;
+  state.secCool = 0;
+  state.zoomed = false;
+  state.moving = false;
+  state.plant = 0;
+  state.planted = false;
+  state.fuse = 0;
+  state.defuse = 0;
+  state.banner = '';
+  state.shake = 0;
+  resetAbilities();
+  spike.visible = false;
+  for (const b of bullets) scene.remove(b.mesh);
+  bullets.length = 0;
+  for (const p of particles) scene.remove(p.mesh);
+  particles.length = 0;
+  clearSmokes();
+  clearBots();
+  playerGroup.position.set(state.px, 0, state.pz);
+  el.menu.classList.add('hidden');
+  el.stick.classList.add('hidden');
+  el.actions.classList.add('hidden');
+  el.movePad?.classList.add('hidden');
+  el.lookPad.classList.add('hidden');
+  el.wepCycle?.classList.add('hidden');
+  el.btnView.classList.add('hidden');
+  closeWeaponList();
+  el.weaponInfo.classList.add('hidden');
+  el.crosshair.classList.add('hidden');
+  viewmodel.visible = false;
+  buildPrepUI();
+  el.prepOverlay.classList.remove('hidden');
+  el.prepTimer.textContent = String(Math.ceil(state.prepTime));
+  updateHud();
+  if (document.pointerLockElement) {
+    try { document.exitPointerLock?.(); } catch (_) { /* ignore */ }
+  }
+}
+
+function beginFight() {
+  if (state.phase !== 'prep') return;
+  resolveNameBuffs();
+  pickSite(MAPS[mapIndex]);
+  refreshSiteVisual();
+  state.phase = 'fight';
+  state.time = state.modeId === 'rush' ? 45 : 70;
+  state.px = SPAWN.x;
+  state.py = 0;
+  state.pz = SPAWN.z;
+  state.vy = 0;
+  state.onGround = true;
+  state.modeEventT = 3;
+  state.stormT = 5;
+  resetAbilities();
+  if (state.nameBuff?.shield) state.buff.shield = state.nameBuff.shield;
+  applyModeWorld();
+  clearBots();
+  clearAllies();
+  // ì¨ë¼ì¸ PvP: ë´ ìì´ ì¬ëë¼ë¦¬ / AIÂ·íë: ë´ ì¤í°
+  if (state.matchType === 'pvp' && state.online) {
+    state.enemyCount = 0;
+    state.allyCount = 0;
+  }
+  const eCount = Math.max(0, Math.min(10, state.enemyCount | 0));
+  const aCount = Math.max(0, Math.min(10, state.allyCount | 0));
+  state.enemyCount = eCount;
+  state.allyCount = aCount;
+  for (let i = 0; i < eCount; i++) bots.push(makeBot(i));
+  for (let i = 0; i < aCount; i++) allies.push(makeAlly(i));
+  // PvP ì°¸ê°ìë ë§µ ë°ëí¸ ì¤í°
+  if (state.online && state.matchType === 'pvp' && !state.isHost) {
+    state.px = -SPAWN.x;
+    state.pz = -SPAWN.z;
+    state.yaw = Math.PI;
+  }
+  buildWeaponBar();
+  el.prepOverlay.classList.add('hidden');
+  el.stick.classList.remove('hidden');
+  el.actions.classList.remove('hidden');
+  el.movePad?.classList.remove('hidden');
+  el.lookPad.classList.remove('hidden');
+  el.wepCycle?.classList.remove('hidden');
+  el.btnView.classList.remove('hidden');
+  closeWeaponList();
+  el.weaponInfo.classList.remove('hidden');
+  applyViewMode();
+  updateWeaponUI();
+  updateSkillButton();
+  updateHud();
+  try { canvas.requestPointerLock?.(); } catch (_) { /* ignore */ }
+}
+
+function castAbilityEffect(id) {
+  const fx = -Math.sin(state.yaw);
+  const fz = -Math.cos(state.yaw);
+  if (id === 'smoke') {
+    const x = state.px + fx * 5;
+    const z = state.pz + fz * 5;
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(3.2, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0x8eaea4, transparent: true, opacity: 0.35 })
+    );
+    mesh.position.set(x, 1.4, z);
+    scene.add(mesh);
+    smokes.push({ x, z, r: 3.4, life: 9, mesh });
+    burst(x, 1.2, z, 12, 0x8eaea4);
+  } else if (id === 'flash') {
+    for (const bot of bots) {
+      if (!bot.alive) continue;
+      const dx = bot.x - state.px;
+      const dz = bot.z - state.pz;
+      const dist = Math.hypot(dx, dz) || 1;
+      if (dist > 16) continue;
+      const dot = (dx * fx + dz * fz) / dist;
+      if (dot < 0.25) continue;
+      if (blocked(state.px, state.pz, bot.x, bot.z)) continue;
+      bot.blind = 3.2;
+    }
+    burst(state.px + fx * 2, 1.4, state.pz + fz * 2, 14, 0xd7efe6);
+  } else if (id === 'heal') {
+    state.hp = Math.min(100, state.hp + 40);
+    burst(state.px, 1.2, state.pz, 12, 0x3ddeb0);
+  } else if (id === 'dash') {
+    const next = resolve(state.px + fx * 4.2, state.pz + fz * 4.2, state.py);
+    state.px = next.x;
+    state.pz = next.z;
+    burst(state.px, 0.8, state.pz, 8, 0x3ddeb0);
+  } else if (id === 'overdrive') {
+    state.buff.dmgMul = 1.4;
+    state.buff.t = 8;
+    burst(state.px, 1.2, state.pz, 16, 0xffe08a);
+  } else if (id === 'fortify') {
+    state.buff.shield = 50;
+    state.buff.t = 10;
+    burst(state.px, 1.2, state.pz, 14, 0x4aa8ff);
+  } else if (id === 'hunt') {
+    state.buff.speedMul = 1.35;
+    state.buff.dmgMul = 1.15;
+    state.buff.t = 7;
+    for (const bot of bots) {
+      if (bot.alive) burst(bot.x, 1.6, bot.z, 4, 0xff6b4a);
+    }
+  }
+}
+
+function useSlot(slot) {
+  if (state.phase !== 'fight' || state.hp <= 0) return;
+  const a = currentAgent();
+  if (slot === 'x') {
+    if (state.ult < a.x.cost) return;
+    state.ult = 0;
+    castAbilityEffect(a.x.id);
+    updateSkillButton();
+    return;
+  }
+  const ab = a[slot];
+  const coolKey = slot + 'Cool';
+  const chKey = slot + 'Ch';
+  if (state.abil[coolKey] > 0 || state.abil[chKey] <= 0) return;
+  castAbilityEffect(ab.id);
+  state.abil[chKey] -= 1;
+  state.abil[coolKey] = ab.cool;
+  updateSkillButton();
+}
+
+function useSkill() {
+  // ëª¨ë°ì¼ ì¤í¬ ë²í¼: ì¬ì© ê°ë¥í ì²« ì¬ë¡¯ (E ì°ì )
+  if (state.abil.eCool <= 0 && state.abil.eCh > 0) useSlot('e');
+  else if (state.abil.qCool <= 0 && state.abil.qCh > 0) useSlot('q');
+  else if (state.abil.cCool <= 0 && state.abil.cCh > 0) useSlot('c');
+  else if (state.ult >= currentAgent().x.cost) useSlot('x');
+}
+
+function endRound(win, banner) {
+  if (state.phase !== 'fight') return;
+  if (document.pointerLockElement) {
+    try { document.exitPointerLock?.(); } catch (_) { /* ignore */ }
+  }
+  if (win) state.wins += 1;
+  else state.losses += 1;
+  state.banner = banner;
+  state.phase = state.wins >= 3 || state.losses >= 3 ? 'match' : 'round';
+  const best = Math.max(loadBest(), state.wins);
+  saveBest(best);
+  el.best.textContent = String(best);
+  el.banner.textContent = banner;
+  el.banner.style.color = win ? 'var(--primary)' : 'var(--danger)';
+  el.btnStart.textContent = state.phase === 'match' ? 'ë¤ì í í' : 'ë¤ì ë¼ì´ë';
+  el.menu.classList.remove('hidden');
+  el.prepOverlay.classList.add('hidden');
+  el.stick.classList.add('hidden');
+  el.actions.classList.add('hidden');
+  el.movePad?.classList.add('hidden');
+  el.lookPad.classList.add('hidden');
+  el.wepCycle?.classList.add('hidden');
+  el.btnView.classList.add('hidden');
+  el.crosshair.classList.add('hidden');
+  el.weaponBar.classList.remove('open');
+  el.weaponBarBackdrop?.classList.remove('open');
+  el.weaponInfo.classList.add('hidden');
+  input.mx = 0; input.my = 0; input.fire = false; input.altFire = false; input.action = false; input.jump = false;
+  viewmodel.visible = false;
+  clearSmokes();
+  clearAllies();
+  updateHud();
+}
+
+function updateHud() {
+  el.round.textContent = String(state.round);
+  el.wins.textContent = String(state.wins);
+  el.losses.textContent = String(state.losses);
+  el.hp.textContent = String(Math.ceil(Math.max(0, state.hp)));
+  el.hpBar.style.transform = `scaleX(${Math.max(0, state.hp) / 100})`;
+  el.enemies.textContent = String(bots.filter((b) => b.alive).length);
+  el.kills.textContent = String(state.kills);
+  if (state.planted) {
+    el.timer.textContent = state.fuse.toFixed(1);
+    el.timerLabel.textContent = 'í­ë°ê¹ì§';
+  } else {
+    el.timer.textContent = Math.max(0, Math.ceil(state.time)).toString();
+    const modeName = currentMode().name;
+    el.timerLabel.textContent = state.modeId === 'classic' ? 'ë¨ì ìê°' : `${modeName}`;
+  }
+  const showProg = state.phase === 'fight' && (state.plant > 0 || state.defuse > 0);
+  el.progressBox.classList.toggle('hidden', !showProg);
+  if (showProg) {
+    const def = state.defuse > 0;
+    el.progressLabel.textContent = def ? 'í´ì  ì¤' : 'ì¤ì¹ ì¤';
+    el.progressFill.style.width = `${(def ? state.defuse / 4 : state.plant / 2.2) * 100}%`;
+  }
+  const inSite = Math.hypot(state.px - SITE.x, state.pz - SITE.z) < SITE.r - 0.4;
+  el.btnPlant.classList.toggle('active', inSite || state.planted);
+  if (state.phase === 'fight') updateSkillButton();
+  if (state.phase === 'prep') {
+    el.timer.textContent = String(Math.max(0, Math.ceil(state.prepTime)));
+    el.timerLabel.textContent = 'ì¤ë¹ ìê°';
+  }
+}
+
+if (el.playerName) {
+  el.playerName.addEventListener('input', () => resolveNameBuffs());
+  el.playerPass?.addEventListener('input', () => resolveNameBuffs());
+}
+fillModeSelect();
+renderFriends();
+el.btnOpenLobby?.addEventListener('click', () => {
+  if (el.lobbyName && el.playerName) el.lobbyName.value = el.lobbyName.value || el.playerName.value || '';
+  fillModeSelect();
+  renderFriends();
+  el.lobbyOverlay?.classList.remove('hidden');
+});
+el.btnLobbyClose?.addEventListener('click', () => {
+  el.lobbyOverlay?.classList.add('hidden');
+});
+el.btnHostCreate?.addEventListener('click', () => createHostRoom());
+el.btnJoinRoom?.addEventListener('click', () => joinRoom());
+el.btnLobbyStart?.addEventListener('click', () => hostStartRaid());
+el.hostModeSelect?.addEventListener('change', () => {
+  if (!state.isHost) return;
+  state.modeId = el.hostModeSelect.value;
+  broadcast({ type: 'setMode', modeId: state.modeId });
+  setLobbyStatus(`ëª¨ë ë³ê²½: ${currentMode().name}`);
+  updateNetBadge();
+});
+el.lobbyOverlay?.addEventListener('click', (e) => {
+  if (e.target === el.lobbyOverlay) el.lobbyOverlay.classList.add('hidden');
+});
+
+el.btnStart.addEventListener('click', () => {
+  resolveNameBuffs();
+  // AI ëì : ì¤íë¼ì¸ ë´ì 
+  state.matchType = 'ai';
+  state.online = false;
+  if (state.phase === 'menu' || state.phase === 'match') {
+    state.wins = 0;
+    state.losses = 0;
+    state.round = 1;
+    state.kills = 0;
+  } else {
+    state.round += 1;
+  }
+  el.banner.textContent = '';
+  beginRound();
+});
+el.btnBeginFight.addEventListener('click', () => beginFight());
+el.btnSkill.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  useSkill();
+});
+
+// ââ íë¸ë¦¿/í°ì¹: ì¼ìª½ ì´ë í¨ë + íë¡í ì¤í±, ì¤ë¥¸ìª½ ìì  ââ
+let stickId = null;
+const stickCenter = { x: 0, y: 0 };
+function placeStick(cx, cy) {
+  const half = (el.stick.offsetWidth || 148) / 2;
+  const x = Math.max(half, Math.min(window.innerWidth * 0.46 - half, cx));
+  const y = Math.max(half, Math.min(window.innerHeight - half, cy));
+  el.stick.style.left = `${x - half}px`;
+  el.stick.style.bottom = 'auto';
+  el.stick.style.top = `${y - half}px`;
+  stickCenter.x = x;
+  stickCenter.y = y;
+}
+function moveStick(cx, cy) {
+  let dx = cx - stickCenter.x;
+  let dy = cy - stickCenter.y;
+  const m = Math.hypot(dx, dy) || 1;
+  const cap = 56;
+  if (m > cap) { dx = (dx / m) * cap; dy = (dy / m) * cap; }
+  const gain = settings.stickSens;
+  input.mx = Math.max(-1, Math.min(1, (dx / cap) * gain));
+  input.my = Math.max(-1, Math.min(1, (dy / cap) * gain));
+  el.knob.style.transform = `translate(${dx}px,${dy}px)`;
+}
+function endStick(e) {
+  if (e && e.pointerId !== stickId) return;
+  stickId = null;
+  input.mx = 0;
+  input.my = 0;
+  el.knob.style.transform = 'translate(0,0)';
+}
+function startStick(e) {
+  if (state.phase !== 'fight') return;
+  if (e.target.closest && e.target.closest('button, .wep-cycle, .weapon-bar, .actions')) return;
+  stickId = e.pointerId;
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  placeStick(e.clientX, e.clientY);
+  moveStick(e.clientX, e.clientY);
+}
+el.movePad?.addEventListener('pointerdown', startStick);
+el.movePad?.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== stickId) return;
+  moveStick(e.clientX, e.clientY);
+});
+el.movePad?.addEventListener('pointerup', endStick);
+el.movePad?.addEventListener('pointercancel', endStick);
+// ê³ ì  ì¤í± ìì­ë ëì¼íê² ëì
+el.stick.style.pointerEvents = 'auto';
+el.stick.addEventListener('pointerdown', startStick);
+el.stick.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== stickId) return;
+  moveStick(e.clientX, e.clientY);
+});
+el.stick.addEventListener('pointerup', endStick);
+el.stick.addEventListener('pointercancel', endStick);
+
+// Look pad (ì¤ë¥¸ì ìì ) â UI ë²í¼ ìë ë¬´ì
+let lookId = null;
+let lastLook = { x: 0, y: 0 };
+el.lookPad.addEventListener('pointerdown', (e) => {
+  if (state.phase !== 'fight') return;
+  if (e.target.closest && e.target.closest('button, .actions, .weapon-bar, .wep-cycle, #btnView, #btnSettings')) return;
+  lookId = e.pointerId;
+  try { el.lookPad.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  lastLook.x = e.clientX;
+  lastLook.y = e.clientY;
+});
+el.lookPad.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== lookId) return;
+  const dx = e.clientX - lastLook.x;
+  const dy = e.clientY - lastLook.y;
+  lastLook.x = e.clientX;
+  lastLook.y = e.clientY;
+  const touch = 0.0055 * settings.touchSens;
+  state.yaw -= dx * touch;
+  const lim = pitchLimits();
+  state.pitch = Math.max(lim.min, Math.min(lim.max, state.pitch - dy * touch * 0.85));
+});
+el.lookPad.addEventListener('pointerup', (e) => { if (e.pointerId === lookId) lookId = null; });
+el.lookPad.addEventListener('pointercancel', (e) => { if (e.pointerId === lookId) lookId = null; });
+
+// íë ë²í¼: pointerleave ë¡ ëê¸°ì§ ìê² capture ì¬ì©
+function bindHoldButton(btn, onDown, onUp) {
+  if (!btn) return;
+  const down = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try { btn.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    onDown(e);
+  };
+  const up = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onUp(e);
+  };
+  btn.addEventListener('pointerdown', down);
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+}
+bindHoldButton(el.btnFire, () => { input.fire = true; }, () => { input.fire = false; });
+bindHoldButton(el.btnPlant, () => { input.action = true; }, () => { input.action = false; });
+bindHoldButton(el.btnJump, () => { input.jump = true; tryJump(); }, () => { input.jump = false; });
+bindHoldButton(el.btnSec, () => { input.altFire = true; }, () => { input.altFire = false; });
+el.btnWepPrev?.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  cycleWeapon(-1);
+});
+el.btnWepNext?.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  cycleWeapon(1);
+});
+el.btnWepList?.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  toggleWeaponList();
+});
+el.weaponBarBackdrop?.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  closeWeaponList();
+});
+
+function tryJump() {
+  if (state.phase !== 'fight' || !state.onGround || state.hp <= 0) return;
+  // ê¸°ë³¸ ì íë¡ ëë¶ë¶ì ìíë¬¼(hâ1.4~1.9)ì ëì ì ìê²
+  let power = 9.6;
+  if (state.modeId === 'lowgrav') power = 12.5;
+  if (state.modeId === 'bounce') power = 10.5;
+  if (state.modeId === 'giant') power = 8.2;
+  state.vy = power;
+  state.onGround = false;
+}
+
+// Keyboard / mouse
+window.addEventListener('keydown', (e) => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  input.keys.add(e.code);
+  if (e.code === 'KeyF') input.action = true;
+  if (e.code === 'Space') { input.jump = true; tryJump(); }
+  if (e.code === 'KeyV') toggleView();
+  // 발로란트식: Q / E / C 스킬, X 궁
+  if (e.code === 'KeyQ') useSlot('q');
+  if (e.code === 'KeyE') useSlot('e');
+  if (e.code === 'KeyC') useSlot('c');
+  if (e.code === 'KeyX') useSlot('x');
+  if (e.code === 'Digit1' || e.code === 'Numpad1') setWeapon(0);
+  if (e.code === 'Digit2' || e.code === 'Numpad2') setWeapon(1);
+  if (e.code === 'Digit3' || e.code === 'Numpad3') setWeapon(2);
+  if (e.code === 'Digit4' || e.code === 'Numpad4') setWeapon(3);
+  if (e.code === 'Digit5' || e.code === 'Numpad5') setWeapon(4);
+  if (e.code === 'Digit6' || e.code === 'Numpad6') setWeapon(5);
+  if (e.code === 'Digit7' || e.code === 'Numpad7') setWeapon(6);
+  if (e.code === 'Digit8' || e.code === 'Numpad8') setWeapon(7);
+  if (e.code === 'Digit9' || e.code === 'Numpad9') setWeapon(8);
+  if (e.code === 'Digit0' || e.code === 'Numpad0') setWeapon(9);
+});
+window.addEventListener('keyup', (e) => {
+  input.keys.delete(e.code);
+  if (e.code === 'KeyF') input.action = false;
+  if (e.code === 'Space') input.jump = false;
+});
+let lastMouse = { x: 0, y: 0, ready: false };
+function applyMouseLook(dx, dy) {
+  if (state.phase !== 'fight') return;
+  if (!dx && !dy) return;
+  const sens = 0.0025 * settings.mouseSens;
+  state.yaw -= dx * sens;
+  const lim = pitchLimits();
+  state.pitch = Math.max(lim.min, Math.min(lim.max, state.pitch - dy * sens * 0.85));
+}
+// 클릭/드래그 없이: movementX 우선, 없으면 위치 델타. 포인터 락 시 화면 밖까지 연속 회전.
+window.addEventListener('mousemove', (e) => {
+  if (state.phase !== 'fight') {
+    lastMouse.ready = false;
+    return;
+  }
+  if (e.target && e.target.closest && e.target.closest('button, .stick, .actions, .settings-panel, .overlay')) {
+    lastMouse.ready = false;
+    return;
+  }
+  // movementX/Y는 포인터 락 없이도 브라우저가 주는 경우가 많음 → 클릭 불필요
+  if (e.movementX || e.movementY) {
+    applyMouseLook(e.movementX, e.movementY);
+    lastMouse.x = e.clientX;
+    lastMouse.y = e.clientY;
+    lastMouse.ready = true;
+    return;
+  }
+  if (!lastMouse.ready) {
+    lastMouse.x = e.clientX;
+    lastMouse.y = e.clientY;
+    lastMouse.ready = true;
+    return;
+  }
+  applyMouseLook(e.clientX - lastMouse.x, e.clientY - lastMouse.y);
+  lastMouse.x = e.clientX;
+  lastMouse.y = e.clientY;
+});
+window.addEventListener('mouseleave', () => { lastMouse.ready = false; });
+document.addEventListener('mouseout', (e) => {
+  if (!e.relatedTarget) lastMouse.ready = false;
+});
+el.btnView.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  toggleView();
+});
+// 락이 풀렸을 때만 다시 요청 (사격 클릭과 분리)
+canvas.addEventListener('click', () => {
+  if (state.phase === 'fight' && document.pointerLockElement !== canvas) {
+    canvas.requestPointerLock?.();
+  }
+});
+window.addEventListener('mousedown', (e) => {
+  if (state.phase !== 'fight') return;
+  const t = e.target;
+  if (t && t.closest && t.closest('button, .stick, .actions, .overlay, .settings-panel, input')) return;
+  if (e.button === 0) input.fire = true;
+  if (e.button === 2) {
+    e.preventDefault();
+    input.altFire = true;
+  }
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0) input.fire = false;
+  if (e.button === 2) input.altFire = false;
+});
+window.addEventListener('contextmenu', (e) => {
+  if (state.phase === 'fight') e.preventDefault();
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function step(dt) {
+  if (state.phase === 'prep') {
+    state.prepTime -= dt;
+    el.prepTimer.textContent = String(Math.max(0, Math.ceil(state.prepTime)));
+    if (state.prepTime <= 0) beginFight();
+    return;
+  }
+  if (state.phase !== 'fight') return;
+
+  state.abil.qCool = Math.max(0, state.abil.qCool - dt);
+  state.abil.eCool = Math.max(0, state.abil.eCool - dt);
+  state.abil.cCool = Math.max(0, state.abil.cCool - dt);
+  if (state.buff.t > 0) {
+    state.buff.t -= dt;
+    if (state.buff.t <= 0) {
+      state.buff.dmgMul = 1;
+      state.buff.speedMul = 1;
+      // shield persists until broken
+    }
+  }
+  for (let i = smokes.length - 1; i >= 0; i--) {
+    const sm = smokes[i];
+    sm.life -= dt;
+    if (sm.mesh) sm.mesh.material.opacity = Math.max(0.05, 0.35 * (sm.life / 9));
+    if (sm.life <= 0) {
+      if (sm.mesh) scene.remove(sm.mesh);
+      smokes.splice(i, 1);
+    }
+  }
+  for (const b of bots) {
+    if (b.blind > 0) b.blind = Math.max(0, b.blind - dt);
+  }
+
+  let mx = input.mx;
+  let my = input.my;
+  if (input.keys.has('KeyW') || input.keys.has('ArrowUp')) my -= 1;
+  if (input.keys.has('KeyS') || input.keys.has('ArrowDown')) my += 1;
+  if (input.keys.has('KeyA') || input.keys.has('ArrowLeft')) mx -= 1;
+  if (input.keys.has('KeyD') || input.keys.has('ArrowRight')) mx += 1;
+
+  const mag = Math.hypot(mx, my);
+  state.moving = mag > 0.12;
+  if (state.moving) {
+    const nx = mx / mag;
+    const nz = my / mag;
+    // Move relative to yaw (camera forward on XZ)
+    const sin = Math.sin(state.yaw);
+    const cos = Math.cos(state.yaw);
+    // forward = (-sin, -cos) in our yaw convention looking along -Z when yaw=0
+    const fx = -sin;
+    const fz = -cos;
+    const rx = cos;
+    const rz = -sin;
+    let mx2 = nx;
+    let mz2 = -nz;
+    if (state.modeId === 'mirror') { mx2 = -nx; }
+    const speed = settings.moveSpeed * (state.buff.speedMul || 1) * (state.nameBuff?.speed || 1) * modeMoveMul();
+    const vx = (fx * mz2 + rx * mx2) * speed * dt;
+    const vz = (fz * mz2 + rz * mx2) * speed * dt;
+    const next = resolve(state.px + vx, state.pz + vz, state.py);
+    state.px = next.x;
+    state.pz = next.z;
+  }
+  // Instant brake is implicit: no velocity carry
+
+  // Jump / gravity — 공중일 때 블록 통과, 블록 위 착지
+  if (input.jump || input.keys.has('Space')) tryJump();
+  if (!state.onGround) {
+    const grav = state.modeId === 'lowgrav' ? 11 : state.modeId === 'bounce' ? 16 : 22;
+    state.vy -= grav * dt;
+    let nextY = state.py + state.vy * dt;
+    const floor = supportHeight(state.px, state.pz);
+    if (state.vy <= 0 && state.py >= floor - 0.05 && nextY <= floor) {
+      nextY = floor;
+      state.vy = 0;
+      state.onGround = true;
+    } else if (nextY <= 0 && floor <= 0) {
+      nextY = 0;
+      state.vy = 0;
+      state.onGround = true;
+    }
+    state.py = Math.max(0, nextY);
+  } else {
+    const floor = supportHeight(state.px, state.pz);
+    if (floor > 0.05) {
+      state.py = floor;
+    } else if (state.py > 0.05) {
+      // 블록 가장자리에서 떨어짐
+      state.onGround = false;
+      state.vy = 0;
+    } else {
+      state.py = 0;
+      state.vy = 0;
+    }
+  }
+
+  state.cool = Math.max(0, state.cool - dt);
+  state.secCool = Math.max(0, state.secCool - dt);
+  state.time -= dt;
+  state.shake = Math.max(0, state.shake - dt * 5);
+  modeTick(dt);
+  netSendPose(dt);
+
+  const lookDir = new THREE.Vector3(
+    -Math.sin(state.yaw) * Math.cos(state.pitch),
+    Math.sin(state.pitch),
+    -Math.cos(state.yaw) * Math.cos(state.pitch)
+  ).normalize();
+  const dmgMul = (state.buff.dmgMul || 1) * (state.nameBuff?.dmg || 1) * modeDmgMul();
+  const eyeY = (state.fp ? 1.55 : 1.05) + state.py;
+
+  function markKill(bot) {
+    bot.alive = false;
+    state.kills += 1;
+    state.ult = Math.min(8, state.ult + 1 + (state.nameBuff?.ult || 0));
+    burst(bot.x, 1, bot.z, 18, 0xe7c98a);
+  }
+
+  if (state.hp > 0 && input.fire && state.cool <= 0) {
+    const w = currentWeapon();
+    if (w.melee) {
+      const range = w.range || 2.2;
+      let hitAny = false;
+      for (const bot of bots) {
+        if (!bot.alive) continue;
+        const dx = bot.x - state.px;
+        const dz = bot.z - state.pz;
+        const dist = Math.hypot(dx, dz);
+        if (dist > range) continue;
+        const fx = -Math.sin(state.yaw);
+        const fz = -Math.cos(state.yaw);
+        const dot = dist > 0.001 ? (dx * fx + dz * fz) / dist : 1;
+        if (dot < 0.35) continue;
+        applyDamageToUnit(bot, w.dmg * dmgMul, 1.5);
+        hitAny = true;
+        if (bot.hp <= 0) markKill(bot);
+      }
+      burst(state.px + lookDir.x * 1.2, eyeY, state.pz + lookDir.z * 1.2, hitAny ? 6 : 3, hitAny ? 0xff6b4a : 0xd7efe6);
+      state.cool = w.cool;
+      state.shake = Math.min(1, state.shake + w.shake);
+      if (state.fp) { viewmodel.position.x = 0.08; viewmodel.position.z = 0.06; }
+    } else {
+      const spread = state.moving ? w.spreadMove : w.spreadStill;
+      for (let p = 0; p < w.pellets; p++) {
+        const dir = lookDir.clone();
+        dir.x += (Math.random() - 0.5) * spread;
+        dir.y += (Math.random() - 0.5) * spread * 0.6;
+        dir.z += (Math.random() - 0.5) * spread;
+        dir.normalize();
+        spawnBullet(state.px + dir.x * 0.55, eyeY, state.pz + dir.z * 0.55, dir.x, dir.y, dir.z, true, w.dmg * dmgMul, w.speed);
+      }
+      state.cool = w.cool;
+      state.shake = Math.min(1, state.shake + w.shake);
+      if (state.fp) viewmodel.position.z = 0.03 + w.shake * 0.12;
+    }
+  }
+
+  // 우클릭 보조 사격
+  if (state.hp > 0 && input.altFire && state.secCool <= 0) {
+    const w = currentWeapon();
+    const sec = w.sec;
+    if (sec) {
+      if (sec.type === 'stab' || (w.melee && sec.type === 'stab')) {
+        const range = sec.range || 2.6;
+        let hitAny = false;
+        for (const bot of bots) {
+          if (!bot.alive) continue;
+          const dx = bot.x - state.px;
+          const dz = bot.z - state.pz;
+          const dist = Math.hypot(dx, dz);
+          if (dist > range) continue;
+          const fx = -Math.sin(state.yaw);
+          const fz = -Math.cos(state.yaw);
+          const dot = dist > 0.001 ? (dx * fx + dz * fz) / dist : 1;
+          if (dot < 0.45) continue;
+          applyDamageToUnit(bot, sec.dmg * dmgMul, 1.55);
+          hitAny = true;
+          if (bot.hp <= 0) markKill(bot);
+        }
+        burst(state.px + lookDir.x * 1.5, eyeY, state.pz + lookDir.z * 1.5, hitAny ? 10 : 4, sec.color);
+        state.secCool = sec.cool;
+        state.shake = Math.min(1, state.shake + sec.shake);
+      } else if (sec.zoom) {
+        state.zoomed = !state.zoomed;
+        camera.fov = state.zoomed ? Math.max(28, settings.fov * 0.45) : settings.fov;
+        camera.updateProjectionMatrix();
+        state.secCool = 0.25;
+        // 정조준 중 한 발
+        if (state.zoomed) {
+          const dir = lookDir.clone();
+          spawnBullet(state.px + dir.x * 0.6, eyeY, state.pz + dir.z * 0.6, dir.x, dir.y, dir.z, true, sec.dmg * dmgMul, sec.speed, sec.color);
+          state.secCool = sec.cool;
+          state.shake = Math.min(1, state.shake + sec.shake);
+          burst(state.px + dir.x, eyeY, state.pz + dir.z, 6, sec.color);
+        }
+      } else {
+        const n = sec.pellets || 1;
+        const gap = sec.gap || 0;
+        for (let p = 0; p < n; p++) {
+          const dir = lookDir.clone();
+          const spr = sec.spread || 0.02;
+          dir.x += (Math.random() - 0.5) * spr + (gap ? (p - (n - 1) / 2) * 0.01 : 0);
+          dir.y += (Math.random() - 0.5) * spr * 0.5;
+          dir.z += (Math.random() - 0.5) * spr;
+          dir.normalize();
+          spawnBullet(
+            state.px + dir.x * 0.55, eyeY, state.pz + dir.z * 0.55,
+            dir.x, dir.y, dir.z, true, sec.dmg * dmgMul, sec.speed, sec.color,
+            { flash: sec.flash, chain: sec.chain, wave: sec.wave }
+          );
+        }
+        state.secCool = sec.cool;
+        state.shake = Math.min(1, state.shake + (sec.shake || 0.2));
+        if (state.fp) viewmodel.position.z = 0.05;
+        burst(state.px + lookDir.x * 1.1, eyeY, state.pz + lookDir.z * 1.1, 5, sec.color || 0xd7efe6);
+      }
+      input.altFire = false; // 단발 트리거
+    }
+  }
+
+  if (!input.altFire && state.zoomed && currentWeapon()?.sec?.zoom) {
+    // 유지 가능
+  } else if (!currentWeapon()?.sec?.zoom) {
+    if (state.zoomed) {
+      state.zoomed = false;
+      camera.fov = settings.fov;
+      camera.updateProjectionMatrix();
+    }
+  }
+
+  if (state.fp) {
+    viewmodel.position.x += (0 - viewmodel.position.x) * Math.min(1, dt * 10);
+    viewmodel.position.y = 0;
+    viewmodel.position.z += (0 - viewmodel.position.z) * Math.min(1, dt * 12);
+  }
+
+  const inSite = Math.hypot(state.px - SITE.x, state.pz - SITE.z) < SITE.r - 0.4;
+  if (!state.planted && inSite && input.action && state.hp > 0) {
+    state.plant += dt;
+    if (state.plant >= 2.2) {
+      state.planted = true;
+      state.fuse = 16;
+      state.plant = 2.2;
+      spike.position.set(SITE.x, 0.28, SITE.z);
+      spike.visible = true;
+      burst(SITE.x, 0.5, SITE.z, 16, 0xe7c98a);
+    }
+  } else if (!state.planted) {
+    state.plant = Math.max(0, state.plant - dt * 1.6);
+  }
+
+  if (state.planted) {
+    state.fuse -= dt;
+    if (state.fuse <= 0) endRound(true, '스파이크 폭발');
+  } else if (state.time <= 0) {
+    endRound(false, '시간 초과');
+  }
+
+  let maxDefuse = 0;
+  for (const b of bots) {
+    if (!b.alive) {
+      b.mesh.visible = false;
+      continue;
+    }
+    b.cool = Math.max(0, b.cool - dt);
+    b.think = (b.think || 0) - dt;
+
+    // 플레이어/아군 중 가장 가까운 대상
+    let tx = state.px;
+    let tz = state.pz;
+    let tAlive = state.hp > 0;
+    let best = tAlive ? Math.hypot(state.px - b.x, state.pz - b.z) : 1e9;
+    for (const al of allies) {
+      if (!al.alive) continue;
+      const d = Math.hypot(al.x - b.x, al.z - b.z);
+      if (d < best) { best = d; tx = al.x; tz = al.z; tAlive = true; }
+    }
+    const tdx = tx - b.x;
+    const tdz = tz - b.z;
+    const tdist = Math.hypot(tdx, tdz) || 1;
+    const seeT = tAlive && !blocked(b.x, b.z, tx, tz);
+
+    if (state.planted && Math.hypot(b.x - SITE.x, b.z - SITE.z) < 3.2) {
+      b.defuse += dt;
+      maxDefuse = Math.max(maxDefuse, b.defuse);
+      if (b.defuse >= 4) endRound(false, '스파이크 해제');
+    } else {
+      b.defuse = Math.max(0, b.defuse - dt);
+      // 엄폐 AI: 피격/노출 시 벽 뒤로, 가끔만 전진
+      if (b.think <= 0) {
+        b.think = 0.6 + Math.random() * 0.9;
+        if (b.hp < 45 || (seeT && tdist < 11 && Math.random() < 0.55)) {
+          const cov = findCoverPoint(b.x, b.z, tx, tz);
+          if (cov) {
+            b.mode = 'cover';
+            b.coverX = cov.x;
+            b.coverZ = cov.z;
+          } else {
+            b.mode = 'hold';
+          }
+        } else if (!seeT || tdist > 14) {
+          b.mode = 'advance';
+        } else if (Math.random() < 0.35) {
+          b.mode = 'hold';
+        } else {
+          b.mode = 'advance';
+        }
+      }
+
+      let mx, mz, spd;
+      if (b.mode === 'cover') {
+        mx = b.coverX - b.x;
+        mz = b.coverZ - b.z;
+        spd = 3.6;
+        if (Math.hypot(mx, mz) < 0.7) b.mode = 'hold';
+      } else if (b.mode === 'hold') {
+        // 살짝 측면 이동만
+        mx = -tdz * 0.3;
+        mz = tdx * 0.3;
+        spd = seeT ? 0.8 : 1.6;
+      } else {
+        // 전진하되 직선 돌진 대신 엄폐 경유 느낌
+        const side = Math.sin(state.time * 1.7 + b.seed) * 0.7;
+        mx = tdx + (-tdz) * side;
+        mz = tdz + tdx * side;
+        spd = seeT && tdist < 12 ? 1.8 : 3.1;
+      }
+      if (state.planted) {
+        mx = SITE.x - b.x;
+        mz = SITE.z - b.z;
+        spd = 3.5;
+      }
+      const md = Math.hypot(mx, mz) || 1;
+      if (b.mode !== 'hold' || Math.hypot(mx, mz) > 0.4) {
+        const next = resolve(b.x + (mx / md) * spd * dt, b.z + (mz / md) * spd * dt);
+        b.x = next.x;
+        b.z = next.z;
+      }
+    }
+
+    b.mesh.position.set(b.x, 0, b.z);
+    b.mesh.rotation.y = Math.atan2(tdx, tdz);
+    b.hpBar.scale.x = Math.max(0.05, b.hp / 100);
+    b.hpBar.lookAt(camera.position);
+
+    // 엄폐 중엔 가끔만  Peek 사격
+    const canShoot = b.mode !== 'cover' || Math.random() < 0.02;
+    if (state.phase === 'fight' && seeT && b.blind <= 0 && tdist < 16 && b.cool <= 0 && tAlive && canShoot) {
+      const aimY = 1.05 + (Math.random() < 0.18 ? 0.45 : 0);
+      const dir = new THREE.Vector3(tdx, aimY - 1.05, tdz).normalize();
+      dir.x += (Math.random() - 0.5) * 0.08;
+      dir.z += (Math.random() - 0.5) * 0.08;
+      dir.normalize();
+      spawnBullet(b.x, 1.05, b.z, dir.x, dir.y, dir.z, false, 11, 28);
+      b.cool = 0.55 + (b.mode === 'hold' ? 0.1 : 0);
+    }
+  }
+
+  // 아군 AI: 적 추적·사격
+  for (const a of allies) {
+    if (!a.alive) {
+      a.mesh.visible = false;
+      continue;
+    }
+    a.cool = Math.max(0, a.cool - dt);
+    let target = null;
+    let best = 1e9;
+    for (const b of bots) {
+      if (!b.alive) continue;
+      const d = Math.hypot(b.x - a.x, b.z - a.z);
+      if (d < best) { best = d; target = b; }
+    }
+    if (target) {
+      const dx = target.x - a.x;
+      const dz = target.z - a.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      const see = !blocked(a.x, a.z, target.x, target.z);
+      a.think = (a.think || 0) - dt;
+      if (a.think <= 0) {
+        a.think = 0.7 + Math.random() * 0.8;
+        if (a.hp < 50 || (see && dist < 10 && Math.random() < 0.5)) {
+          const cov = findCoverPoint(a.x, a.z, target.x, target.z);
+          if (cov) {
+            a.mode = 'cover';
+            a.coverX = cov.x;
+            a.coverZ = cov.z;
+          } else a.mode = 'hold';
+        } else {
+          a.mode = (!see || dist > 11) ? 'advance' : 'hold';
+        }
+      }
+      if (a.mode === 'cover') {
+        const mx = a.coverX - a.x;
+        const mz = a.coverZ - a.z;
+        const md =Math.hypot(mx, mz) || 1;
+        if (md > 0.6) {
+          const next = resolve(a.x + (mx / md) * 3.4 * dt, a.z + (mz / md) * 3.4 * dt);
+          a.x = next.x; a.z = next.z;
+        } else a.mode = 'hold';
+      } else if (a.mode === 'advance' && (!see || dist > 9)) {
+        const side = Math.sin(state.time * 1.5 + a.seed) * 0.55;
+        const mx = dx + (-dz) * side;
+        const mz = dz + dx * side;
+        const md = Math.hypot(mx, mz) || 1;
+        const next = resolve(a.x + (mx / md) * 3.0 * dt, a.z + (mz / md) * 3.0 * dt);
+        a.x = next.x; a.z = next.z;
+      } else if (a.mode === 'hold') {
+        const side = Math.cos(state.time * 2 + a.seed) * 0.4;
+        const next = resolve(a.x + (-dz / dist) * side * dt, a.z + (dx / dist) * side * dt);
+        a.x = next.x; a.z = next.z;
+      }
+      a.mesh.position.set(a.x, 0, a.z);
+      a.mesh.rotation.y = Math.atan2(dx, dz);
+      if (see && dist < 15 && a.cool <= 0 && (a.mode !== 'cover' || Math.random() < 0.03)) {
+        const aimY = 1.05 + (Math.random() < 0.22 ? 0.5 : 0);
+        const dir = new THREE.Vector3(dx, aimY - 1.05, dz).normalize();
+        dir.x += (Math.random() - 0.5) * 0.06;
+        dir.z += (Math.random() - 0.5) * 0.06;
+        dir.normalize();
+        spawnBullet(a.x, 1.05, a.z, dir.x, dir.y, dir.z, true, 16, 34);
+        a.cool = 0.38;
+      }
+    } else {
+      a.mesh.position.set(a.x, 0, a.z);
+    }
+    a.hpBar.scale.x = Math.max(0.05, a.hp / 100);
+    a.hpBar.lookAt(camera.position);
+  }
+
+  state.defuse = maxDefuse;
+  if (state.phase !== 'fight') return;
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.life -= dt;
+    b.mesh.position.x += b.vx * dt;
+    b.mesh.position.y += b.vy * dt;
+    b.mesh.position.z += b.vz * dt;
+    const bx = b.mesh.position.x;
+    const by = b.mesh.position.y;
+    const bz = b.mesh.position.z;
+    let dead = b.life <= 0 || by < 0.05 || by > 6;
+    if (!dead) {
+      for (const s of solids) {
+        if (Math.abs(bx - s.x) < s.hw && Math.abs(bz - s.z) < s.hd && by < 2) {
+          dead = true;
+          break;
+        }
+      }
+    }
+    if (dead) {
+      burst(bx, by, bz, 4, b.friendly ? 0xd7efe6 : 0xff6b4a);
+      scene.remove(b.mesh);
+      bullets.splice(i, 1);
+      continue;
+    }
+    if (b.friendly) {
+      let hitSomething = false;
+      for (const bot of bots) {
+        if (!bot.alive) continue;
+        const hitR = b.wave ? 1.4 : 0.55;
+        if (Math.hypot(bot.x - bx, bot.z - bz) < hitR && by > 0.15 && by < 1.85) {
+          applyDamageToUnit(bot, b.dmg, by);
+          if (b.flash) bot.blind = Math.max(bot.blind, 2.8);
+          if (b.chain) {
+            for (const other of bots) {
+              if (!other.alive || other === bot) continue;
+              if (Math.hypot(other.x - bot.x, other.z - bot.z) < 5) {
+                applyDamageToUnit(other, b.dmg * 0.55, 1.2);
+                burst(other.x, 1.2, other.z, 6, 0x66ccff);
+                if (other.hp <= 0) {
+                  other.alive = false;
+                  state.kills += 1;
+                  state.ult = Math.min(8, state.ult + 1 + (state.nameBuff?.ult || 0));
+                }
+              }
+            }
+          }
+          if (bot.hp <= 0) {
+            bot.alive = false;
+            state.kills += 1;
+            state.ult = Math.min(8, state.ult + 1 + (state.nameBuff?.ult || 0));
+            burst(bot.x, 1, bot.z, 16, 0xe7c98a);
+          }
+          hitSomething = true;
+          if (!b.wave) {
+            scene.remove(b.mesh);
+            bullets.splice(i, 1);
+          }
+          break;
+        }
+      }
+      // PvP: ìê²© íë ì´ì´ í¼ê²©
+      if (!hitSomething && state.online && state.matchType === 'pvp') {
+        for (const [rid, r] of net.remotes) {
+          if ((r.hp || 0) <= 0) continue;
+          if (Math.hypot(r.x - bx, r.z - bz) < 0.55 && by > 0.15 && by < 1.85) {
+            const dmg = b.dmg * zoneMult(by);
+            broadcast({ type: 'hitYou', target: rid, dmg });
+            burst(r.x, 1.2, r.z, 8, 0xff6b4a);
+            if (!b.wave) {
+              scene.remove(b.mesh);
+              bullets.splice(i, 1);
+            }
+            break;
+          }
+        }
+      }
+    } else {
+      // ì  ì´ì: íë ì´ì´ ëë ìêµ°
+      let absorbed = false;
+      if (state.hp > 0 && Math.hypot(state.px - bx, state.pz - bz) < 0.5 && by > 0.15 && by < 1.85) {
+        let dmg = b.dmg * zoneMult(by);
+        if (state.buff.shield > 0) {
+          const use = Math.min(state.buff.shield, dmg);
+          state.buff.shield -= use;
+          dmg -= use;
+        }
+        state.hp -= dmg;
+        state.shake = Math.min(1, state.shake + 0.4);
+        burst(state.px, by, state.pz, 8, zoneMult(by) >= 2 ? 0xffe08a : 0xff6b4a);
+        absorbed = true;
+        if (state.hp <= 0) {
+          state.hp = 0;
+          endRound(false, 'ì ë©¸');
+        }
+      }
+      if (!absorbed) {
+        for (const al of allies) {
+          if (!al.alive) continue;
+          if (Math.hypot(al.x - bx, al.z - bz) < 0.55 && by > 0.15 && by < 1.85) {
+            applyDamageToUnit(al, b.dmg, by);
+            if (al.hp <= 0) al.alive = false;
+            absorbed = true;
+            break;
+          }
+        }
+      }
+      if (absorbed) {
+        scene.remove(b.mesh);
+        bullets.splice(i, 1);
+      }
+    }
+  }
+
+  if (state.phase === 'fight' && bots.every((b) => !b.alive)) endRound(true, 'ì  ì ë©¸');
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    p.mesh.position.x += p.vx * dt;
+    p.mesh.position.y += p.vy * dt;
+    p.mesh.position.z += p.vz * dt;
+    p.vy -= 8 * dt;
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      particles.splice(i, 1);
+    }
+  }
+
+  playerGroup.position.set(state.px, state.py, state.pz);
+  playerGroup.rotation.y = state.yaw;
+  playerBody.material.color.set(state.moving ? 0x8ef0d4 : 0x3ddeb0);
+  if (state.planted) {
+    spike.rotation.y += dt * 2.5;
+    spike.position.y = 0.28 + Math.sin(performance.now() * 0.008) * 0.05;
+  }
+}
+
+function updateCamera() {
+  const sh = state.shake * (state.fp ? 0.06 : 0.12);
+  const baseEye = 1.55 + state.py;
+  if (state.fp) {
+    camera.position.set(
+      state.px + (Math.random() - 0.5) * sh,
+      baseEye + (Math.random() - 0.5) * sh * 0.5,
+      state.pz + (Math.random() - 0.5) * sh
+    );
+    const tx = state.px - Math.sin(state.yaw) * Math.cos(state.pitch);
+    const ty = baseEye + Math.sin(state.pitch);
+    const tz = state.pz - Math.cos(state.yaw) * Math.cos(state.pitch);
+    camera.lookAt(tx, ty, tz);
+  } else {
+    const dist = 6.2;
+    const height = 2.4 + state.py;
+    const cx = state.px + Math.sin(state.yaw) * dist * Math.cos(state.pitch);
+    const cy = height + Math.sin(state.pitch) * dist * 0.9;
+    const cz = state.pz + Math.cos(state.yaw) * dist * Math.cos(state.pitch);
+    camera.position.set(
+      cx + (Math.random() - 0.5) * sh,
+      cy + (Math.random() - 0.5) * sh,
+      cz + (Math.random() - 0.5) * sh
+    );
+    camera.lookAt(state.px, 1.1 + state.py, state.pz);
+  }
+}
+
+// ëª¨ë°ì¼: ì¤í¬ë¡¤/ì¤/ì ì¤ì² ì°¨ë¨
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('gesturechange', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => {
+  if (e.target.closest && e.target.closest('input, textarea, select, .prep-panel, .settings-panel, .panel, .admin-panel')) return;
+  e.preventDefault();
+}, { passive: false });
+
+// ââ ê´ë¦¬ì ì½ì ââ
+const ADMIN_PASS = 'ADMIN-001';
+const CUSTOM_MAPS_KEY = 'sitehold-custom-maps-v1';
+const CUSTOM_WEAPONS_KEY = 'sitehold-custom-weapons-v1';
+const ADMIN_SESSION_KEY = 'sitehold-admin-ok';
+let adminUnlocked = false;
+try { adminUnlocked = sessionStorage.getItem(ADMIN_SESSION_KEY) === '1'; } catch (_) {}
+
+function adminWrite(node, text, cls) {
+  if (!node) return;
+  node.textContent = text;
+  node.classList.remove('err', 'ok');
+  if (cls) node.classList.add(cls);
+}
+function adminLogLine(msg, isErr) {
+  const prev = el.adminLog?.textContent || '';
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  adminWrite(el.adminLog, (prev ? prev + '\n' : '') + line, isErr ? 'err' : 'ok');
+}
+function refreshAdminMapList() {
+  if (!el.adminMapList) return;
+  const names = MAPS.map((m, i) => `${i}: ${m.name}${m.custom ? ' (ì»¤ì¤í)' : ''}`).join(' Â· ');
+  el.adminMapList.textContent = `ë§µ ${MAPS.length}ê° Â· ë¬´ê¸° ${WEAPONS.length}ê°\n${names}`;
+}
+function persistCustomMaps() {
+  const customs = MAPS.filter((m) => m.custom);
+  try { localStorage.setItem(CUSTOM_MAPS_KEY, JSON.stringify(customs)); } catch (_) {}
+}
+function persistCustomWeapons() {
+  const customs = WEAPONS.filter((w) => w.custom);
+  try { localStorage.setItem(CUSTOM_WEAPONS_KEY, JSON.stringify(customs)); } catch (_) {}
+}
+function loadPersistedCustoms() {
+  try {
+    const maps = JSON.parse(localStorage.getItem(CUSTOM_MAPS_KEY) || '[]');
+    if (Array.isArray(maps)) {
+      for (const m of maps) {
+        if (!m || !m.id) continue;
+        if (MAPS.some((x) => x.id === m.id)) continue;
+        m.custom = true;
+        MAPS.push(m);
+      }
+    }
+  } catch (_) {}
+  try {
+    const weps = JSON.parse(localStorage.getItem(CUSTOM_WEAPONS_KEY) || '[]');
+    if (Array.isArray(weps)) {
+      for (const w of weps) {
+        if (!w || !w.id) continue;
+        if (WEAPONS.some((x) => x.id === w.id)) continue;
+        w.custom = true;
+        WEAPONS.push(w);
+      }
+    }
+  } catch (_) {}
+}
+loadPersistedCustoms();
+
+const SiteholdAdmin = {
+  THREE,
+  get state() { return state; },
+  get mapIndex() { return mapIndex; },
+  maps() { return MAPS.map((m) => ({ id: m.id, name: m.name, custom: !!m.custom })); },
+  weapons() { return WEAPONS.map((w) => ({ id: w.id, name: w.name, custom: !!w.custom })); },
+  log(msg) { adminLogLine(String(msg), false); },
+  /** ë§µ ì¶ê°. covers: {x,z,w,d,h}, sites: {x,z,r}, spawn/enemies/allies: {x,z} */
+  addMap(map) {
+    if (!map || !map.id || !map.name) throw new Error('map.id, map.name íì');
+    if (!Array.isArray(map.covers)) map.covers = [];
+    if (!Array.isArray(map.sites) || !map.sites.length) map.sites = [{ x: 20, z: 0, r: 5 }];
+    if (!map.spawn) map.spawn = { x: -28, z: 0 };
+    if (!Array.isArray(map.enemies)) map.enemies = [{ x: 18, z: 0 }];
+    if (!Array.isArray(map.allies)) map.allies = [{ x: -22, z: 0 }];
+    map.custom = true;
+    const idx = MAPS.findIndex((m) => m.id === map.id);
+    if (idx >= 0) MAPS[idx] = map;
+    else MAPS.push(map);
+    persistCustomMaps();
+    refreshAdminMapList();
+    try { if (typeof buildPrepUI === 'function') buildPrepUI(); } catch (_) {}
+    adminLogLine(`ë§µ ì ì¥: ${map.name} (${map.id})`, false);
+    return MAPS.findIndex((m) => m.id === map.id);
+  },
+  removeMap(id) {
+    const i = MAPS.findIndex((m) => m.id === id && m.custom);
+    if (i < 0) throw new Error('ì»¤ì¤í ë§µì´ ìëê±°ë ìì: ' + id);
+    MAPS.splice(i, 1);
+    if (mapIndex >= MAPS.length) mapIndex = 0;
+    persistCustomMaps();
+    loadMap(mapIndex);
+    refreshAdminMapList();
+    adminLogLine('ë§µ ì­ì : ' + id, false);
+  },
+  selectMap(idOrIndex) {
+    let i = typeof idOrIndex === 'number' ? idOrIndex : MAPS.findIndex((m) => m.id === idOrIndex);
+    if (i < 0) throw new Error('ë§µ ìì');
+    loadMap(i);
+    adminLogLine(`ë§µ ì í: ${MAPS[i].name}`, false);
+    try { if (typeof buildPrepUI === 'function') buildPrepUI(); } catch (_) {}
+    return i;
+  },
+  addWeapon(w) {
+    if (!w || !w.id || !w.name) throw new Error('weapon.id, weapon.name íì');
+    w.custom = true;
+    if (w.dmg == null) w.dmg = 20;
+    if (w.cool == null) w.cool = 0.12;
+    if (w.pellets == null) w.pellets = 1;
+    if (w.speed == null) w.speed = 40;
+    if (w.spreadStill == null) w.spreadStill = 0.03;
+    if (w.spreadMove == null) w.spreadMove = 0.12;
+    if (w.shake == null) w.shake = 0.12;
+    if (w.color == null) w.color = 0x1a2e28;
+    if (w.accent == null) w.accent = 0x3ddeb0;
+    if (w.length == null) w.length = 0.5;
+    if (!w.shape) w.shape = 'rifle';
+    if (!w.note) w.note = 'ì»¤ì¤í';
+    if (!w.sec) w.sec = { type: 'burst', name: 'í¹ì', dmg: 18, cool: 0.5, pellets: 3, spread: 0.05, speed: 42, shake: 0.2, color: 0x3ddeb0 };
+    const idx = WEAPONS.findIndex((x) => x.id === w.id);
+    if (idx >= 0) WEAPONS[idx] = w;
+    else WEAPONS.push(w);
+    persistCustomWeapons();
+    try { buildWeaponBar(); } catch (_) {}
+    try { if (typeof buildPrepUI === 'function') buildPrepUI(); } catch (_) {}
+    adminLogLine(`ë¬´ê¸° ì ì¥: ${w.name}`, false);
+    return WEAPONS.findIndex((x) => x.id === w.id);
+  },
+  rebuild() {
+    loadMap(mapIndex);
+    adminLogLine('íì¬ ë§µ ë¦¬ë¹ë ìë£', false);
+  },
+  help() {
+    return `SiteholdAdmin API
+api.addMap({ id, name, sites, spawn, enemies, allies, covers })
+api.selectMap(id|index)
+api.removeMap(id)  // ì»¤ì¤íë§
+api.addWeapon({ id, name, dmg, cool, ... })
+api.maps() / api.weapons()
+api.rebuild()
+api.log(msg)
+covers ì: { x:0, z:0, w:4, d:1.2, h:1.5 }
+sites ì: { x:22, z:0, r:5.2 }`;
+  },
+};
+window.SiteholdAdmin = SiteholdAdmin;
+
+const ADMIN_TEMPLATE = `// ìì  â SiteholdAdmin ì¼ë¡ ë§µ/ë¬´ê¸° ì¶ê°
+// 1) ì»¤ì¤í ë§µ
+SiteholdAdmin.addMap({
+  id: 'my_fort',
+  name: 'ë´ ìì',
+  sites: [
+    { x: 24, z: 0, r: 5.4 },
+    { x: 18, z: -10, r: 4.8 },
+  ],
+  spawn: { x: -30, z: 0 },
+  enemies: [
+    { x: 20, z: 6 }, { x: 22, z: -6 }, { x: 28, z: 0 },
+  ],
+  allies: [
+    { x: -24, z: -4 }, { x: -24, z: 4 },
+  ],
+  covers: [
+    { x: -12, z: 0, w: 1.4, d: 8, h: 1.7 },
+    { x: -2, z: 6, w: 5, d: 1.3, h: 1.5 },
+    { x: -2, z: -6, w: 5, d: 1.3, h: 1.5 },
+    { x: 10, z: 0, w: 1.3, d: 6, h: 1.6 },
+    { x: 18, z: 4, w: 4, d: 1.2, h: 1.4 },
+  ],
+});
+
+// 2) ë§µ ì í
+SiteholdAdmin.selectMap('my_fort');
+
+// 3) (ì í) ë¬´ê¸°
+SiteholdAdmin.addWeapon({
+  id: 'admin_cannon',
+  name: 'ê´ë¦¬ìí¬',
+  dmg: 45,
+  cool: 0.18,
+  note: 'ì»¤ì¤í',
+  shape: 'lmg',
+  color: 0x402010,
+  accent: 0xff6b4a,
+  sec: { type: 'slug', name: 'íë°©', dmg: 90, cool: 1.0, pellets: 1, spread: 0.01, speed: 55, shake: 0.4, color: 0xff6b4a },
+});
+
+SiteholdAdmin.log('ìì  ì¤í ìë£');
+`;
+
+function openAdmin() {
+  el.adminOverlay?.classList.remove('hidden');
+  if (adminUnlocked) {
+    el.adminGate?.classList.add('hidden');
+    el.adminEditor?.classList.remove('hidden');
+    refreshAdminMapList();
+  } else {
+    el.adminGate?.classList.remove('hidden');
+    el.adminEditor?.classList.add('hidden');
+    adminWrite(el.adminGateLog, '', null);
+  }
+}
+function closeAdmin() {
+  el.adminOverlay?.classList.add('hidden');
+}
+function tryAdminLogin() {
+  const pass = (el.adminPass?.value || '').trim();
+  if (pass !== ADMIN_PASS) {
+    adminWrite(el.adminGateLog, 'ê±°ë¶ë¨', 'err');
+    return;
+  }
+  adminUnlocked = true;
+  try { sessionStorage.setItem(ADMIN_SESSION_KEY, '1'); } catch (_) {}
+  el.adminGate?.classList.add('hidden');
+  el.adminEditor?.classList.remove('hidden');
+  refreshAdminMapList();
+  if (el.adminCode && !el.adminCode.value.trim()) el.adminCode.value = ADMIN_TEMPLATE;
+  adminLogLine('ê´ë¦¬ì ì ìë¨. ì½ëë¥¼ ì¤íí  ì ììµëë¤.', false);
+}
+function runAdminCode() {
+  if (!adminUnlocked) {
+    adminWrite(el.adminGateLog, 'ë¨¼ì  ë¡ê·¸ì¸íì¸ì.', 'err');
+    return;
+  }
+  const code = el.adminCode?.value || '';
+  if (!code.trim()) {
+    adminLogLine('ì½ëê° ë¹ì´ ììµëë¤.', true);
+    return;
+  }
+  try {
+    // api ë§¤ê°ë³ì ìì´ ì¤í â ì½ë ììì const api = ... ë ê°ë¥
+    const fn = new Function('SiteholdAdmin', 'THREE', 'MAPS', 'WEAPONS', code);
+    const result = fn(SiteholdAdmin, THREE, MAPS, WEAPONS);
+    if (result !== undefined) adminLogLine('ê²°ê³¼: ' + String(result), false);
+    else adminLogLine('ì¤í ìë£', false);
+    refreshAdminMapList();
+  } catch (err) {
+    adminLogLine('ì¤ë¥: ' + (err && err.message ? err.message : String(err)), true);
+  }
+}
+
+el.btnOpenAdmin?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openAdmin();
+});
+el.btnAdminLogin?.addEventListener('click', () => tryAdminLogin());
+el.adminPass?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') tryAdminLogin();
+});
+el.btnAdminClose1?.addEventListener('click', () => closeAdmin());
+el.btnAdminClose2?.addEventListener('click', () => closeAdmin());
+el.btnAdminRun?.addEventListener('click', () => runAdminCode());
+el.btnAdminTemplate?.addEventListener('click', () => {
+  if (el.adminCode) el.adminCode.value = ADMIN_TEMPLATE;
+  adminLogLine('ìì  ì½ëë¥¼ ë¶ë¬ììµëë¤.', false);
+});
+el.btnAdminClearCustom?.addEventListener('click', () => {
+  if (!adminUnlocked) return;
+  if (!confirm('ì»¤ì¤í ë§µ/ë¬´ê¸°ë¥¼ ëª¨ë ì­ì í ê¹ì?')) return;
+  for (let i = MAPS.length - 1; i >= 0; i--) if (MAPS[i].custom) MAPS.splice(i, 1);
+  for (let i = WEAPONS.length - 1; i >= 0; i--) if (WEAPONS[i].custom) WEAPONS.splice(i, 1);
+  try { localStorage.removeItem(CUSTOM_MAPS_KEY); localStorage.removeItem(CUSTOM_WEAPONS_KEY); } catch (_) {}
+  mapIndex = 0;
+  loadMap(0);
+  try { buildWeaponBar(); buildPrepUI(); } catch (_) {}
+  refreshAdminMapList();
+  adminLogLine('ì»¤ì¤í ì½íì¸  ì ë¶ ì­ì ë¨', false);
+});
+el.adminOverlay?.addEventListener('click', (e) => {
+  if (e.target === el.adminOverlay) closeAdmin();
+});
+
+let hudAcc = 0;
+function frame() {
+  const dt = Math.min(0.05, clock.getDelta());
+  let acc = dt;
+  while (acc > 0) {
+    const stepDt = Math.min(1 / 60, acc);
+    step(stepDt);
+    acc -= stepDt;
+  }
+  updateCamera();
+  hudAcc += dt;
+  if (hudAcc > 0.08) {
+    hudAcc = 0;
+    updateHud();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
